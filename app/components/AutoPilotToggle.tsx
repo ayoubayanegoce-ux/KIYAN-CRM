@@ -1,22 +1,49 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { Zap, ZapOff, Loader2 } from "lucide-react";
 import { setAutopilotSetting } from "@/app/actions/settings";
 
+const STORAGE_KEY = "crm_autopilot_enabled";
+
+function subscribeToStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function readStoredValue(): boolean | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw === null ? null : raw === "true";
+}
+
+// لا وجود لـ localStorage على الخادم ولا في أول عرض على العميل قبل الترطيب،
+// فنُرجع null هنا لضمان تطابق الناتج مع الخادم وتفادي أي Hydration mismatch.
+function readServerValue(): boolean | null {
+  return null;
+}
+
 export default function AutoPilotToggle({ initialEnabled }: { initialEnabled: boolean }) {
-  const [enabled, setEnabled] = useState(initialEnabled);
+  // useSyncExternalStore هو الأسلوب الآمن لقراءة مصدر خارجي كـ localStorage:
+  // يُرجع null أثناء الـ SSR/أول عرض (مطابقاً initialEnabled)، ثم بعد الترطيب
+  // يقرأ القيمة الفعلية المحفوظة محلياً — دون اللجوء إلى setState داخل useEffect.
+  const storedValue = useSyncExternalStore(subscribeToStorage, readStoredValue, readServerValue);
+  const [override, setOverride] = useState<boolean | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const enabled = override ?? storedValue ?? initialEnabled;
 
   function toggle() {
     const next = !enabled;
-    setEnabled(next);
+    setOverride(next);
+    localStorage.setItem(STORAGE_KEY, String(next));
+
     startTransition(async () => {
       try {
         await setAutopilotSetting(next);
       } catch (error) {
         console.error(error);
-        setEnabled(!next);
+        setOverride(!next);
+        localStorage.setItem(STORAGE_KEY, String(!next));
       }
     });
   }
