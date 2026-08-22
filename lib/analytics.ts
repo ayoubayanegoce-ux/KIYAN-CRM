@@ -1,0 +1,58 @@
+export type DealLike = {
+  value: number | string | null;
+  stage: string | null;
+};
+
+export type LeadLike = {
+  ai_intent: string | null;
+  status: string | null;
+};
+
+export type CrmStats = {
+  totalPipelineValue: number;
+  totalDealsCount: number;
+  wonDealsCount: number;
+  lostDealsCount: number;
+  hotLeadsCount: number;
+  totalLeadsCount: number;
+  conversionRate: number;
+  averageDealValue: number;
+  dealsByStage: Record<string, { count: number; value: number }>;
+};
+
+export function computeCrmStats(leads: LeadLike[], deals: DealLike[]): CrmStats {
+  const totalLeadsCount = leads.length;
+  const hotLeadsCount = leads.filter((l) => l.ai_intent === "hot").length;
+
+  const totalDealsCount = deals.length;
+  const wonDealsCount = deals.filter((d) => d.stage === "won").length;
+  const lostDealsCount = deals.filter((d) => d.stage === "lost").length;
+
+  const totalPipelineValue = deals
+    .filter((d) => d.stage !== "lost")
+    .reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+
+  const totalDealsValue = deals.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+  const averageDealValue = totalDealsCount > 0 ? totalDealsValue / totalDealsCount : 0;
+  const conversionRate = totalDealsCount > 0 ? (wonDealsCount / totalDealsCount) * 100 : 0;
+
+  const dealsByStage: Record<string, { count: number; value: number }> = {};
+  for (const d of deals) {
+    const key = d.stage || "unknown";
+    if (!dealsByStage[key]) dealsByStage[key] = { count: 0, value: 0 };
+    dealsByStage[key].count += 1;
+    dealsByStage[key].value += Number(d.value) || 0;
+  }
+
+  return {
+    totalPipelineValue,
+    totalDealsCount,
+    wonDealsCount,
+    lostDealsCount,
+    hotLeadsCount,
+    totalLeadsCount,
+    conversionRate,
+    averageDealValue,
+    dealsByStage,
+  };
+}
