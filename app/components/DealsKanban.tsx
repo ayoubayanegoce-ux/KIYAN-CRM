@@ -2,16 +2,8 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { GripVertical } from "lucide-react";
-import { updateDealStage, type DealStage } from "@/app/actions/deals";
-
-type Deal = {
-  id: string;
-  title: string;
-  value: number;
-  stage: DealStage;
-  lead_id: string | null;
-  leads: { name: string; company: string | null; email: string } | null;
-};
+import { updateDealStage, type DealStage, type DealRow } from "@/app/actions/deals";
+import { useRealtimeDeals } from "@/lib/hooks/useRealtimeDeals";
 
 const STAGES: { key: DealStage; label: string; accent: string }[] = [
   { key: "discovery", label: "Discovery", accent: "border-sky-800/60 bg-sky-950/20" },
@@ -23,9 +15,10 @@ const STAGES: { key: DealStage; label: string; accent: string }[] = [
 
 const currency = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
-export default function DealsKanban({ deals }: { deals: Deal[] }) {
+export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId: string }) {
+  const liveDeals = useRealtimeDeals(orgId, deals);
   const [optimisticDeals, setOptimisticStage] = useOptimistic(
-    deals,
+    liveDeals,
     (state, { id, stage }: { id: string; stage: DealStage }) =>
       state.map((d) => (d.id === id ? { ...d, stage } : d))
   );

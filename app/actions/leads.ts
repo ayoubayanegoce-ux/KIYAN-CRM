@@ -4,6 +4,8 @@ import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { qualifyLead } from "@/lib/ai";
 import { parseCsv } from "@/lib/csv";
+import { logActivity } from "@/lib/activity";
+import { maybeRunAutoPilot } from "@/lib/autopilot";
 import { revalidatePath } from "next/cache";
 
 export type ImportSkip = { row: number; reason: string };
@@ -40,19 +42,40 @@ export async function addLead(formData: FormData) {
   // تشغيل وكيل الذكاء الاصطناعي لتقييم العميل فورياً
   const { ai_score, ai_intent } = await qualifyLead(name, email, company);
 
-  const { error } = await supabase.from("leads").insert([
-    {
-      org_id: orgId,
-      name,
-      email,
-      company,
-      status: "new",
-      ai_score,
-      ai_intent,
-    },
-  ]);
+  const { data, error } = await supabase
+    .from("leads")
+    .insert([
+      {
+        org_id: orgId,
+        name,
+        email,
+        company,
+        status: "new",
+        ai_score,
+        ai_intent,
+      },
+    ])
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+
+  await logActivity({
+    orgId,
+    leadId: data.id,
+    type: "lead_created",
+    description: `تم إنشاء عميل جديد: ${name}`,
+  });
+  await logActivity({
+    orgId,
+    leadId: data.id,
+    type: "ai_qualified",
+    description: `تقييم الذكاء الاصطناعي: ${ai_score}/100 (${ai_intent})`,
+    metadata: { ai_score, ai_intent },
+  });
+
+  await maybeRunAutoPilot(orgId, { id: data.id, name, email, company, ai_score, ai_intent });
+
   revalidatePath("/");
 }
 
@@ -94,18 +117,50 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
   );
 
   if (qualified.length > 0) {
-    const { error } = await supabase.from("leads").insert(
-      qualified.map((lead) => ({
-        org_id: orgId,
+    const { data: inserted, error } = await supabase
+      .from("leads")
+      .insert(
+        qualified.map((lead) => ({
+          org_id: orgId,
+          name: lead.name,
+          email: lead.email,
+          company: lead.company,
+          status: "new",
+          ai_score: lead.ai_score,
+          ai_intent: lead.ai_intent,
+        }))
+      )
+      .select("id");
+    if (error) throw new Error(error.message);
+
+    for (let i = 0; i < qualified.length; i++) {
+      const lead = qualified[i];
+      const leadId = inserted?.[i]?.id;
+      if (!leadId) continue;
+
+      await logActivity({
+        orgId,
+        leadId,
+        type: "lead_created",
+        description: `تم استيراد عميل عبر CSV: ${lead.name}`,
+      });
+      await logActivity({
+        orgId,
+        leadId,
+        type: "ai_qualified",
+        description: `تقييم الذكاء الاصطناعي: ${lead.ai_score}/100 (${lead.ai_intent})`,
+        metadata: { ai_score: lead.ai_score, ai_intent: lead.ai_intent },
+      });
+
+      await maybeRunAutoPilot(orgId, {
+        id: leadId,
         name: lead.name,
         email: lead.email,
         company: lead.company,
-        status: "new",
         ai_score: lead.ai_score,
         ai_intent: lead.ai_intent,
-      }))
-    );
-    if (error) throw new Error(error.message);
+      });
+    }
   }
 
   revalidatePath("/");

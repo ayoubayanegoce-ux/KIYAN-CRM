@@ -2,9 +2,21 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 
 export type DealStage = "discovery" | "proposal" | "negotiation" | "won" | "lost";
+
+export type DealRow = {
+  id: string;
+  org_id: string;
+  lead_id: string | null;
+  title: string;
+  value: number;
+  stage: DealStage;
+  created_at: string;
+  leads?: { name: string; company: string | null; email: string } | null;
+};
 
 const DEAL_STAGES: DealStage[] = ["discovery", "proposal", "negotiation", "won", "lost"];
 
@@ -35,17 +47,31 @@ export async function createDeal(formData: FormData) {
 
   if (!title) throw new Error("عنوان الصفقة مطلوب");
 
-  const { error } = await supabase.from("deals").insert([
-    {
-      org_id: orgId,
-      lead_id: leadId,
-      title,
-      value,
-      stage: "discovery",
-    },
-  ]);
+  const { data, error } = await supabase
+    .from("deals")
+    .insert([
+      {
+        org_id: orgId,
+        lead_id: leadId,
+        title,
+        value,
+        stage: "discovery",
+      },
+    ])
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+
+  await logActivity({
+    orgId,
+    leadId,
+    dealId: data.id,
+    type: "deal_created",
+    description: `تم إنشاء صفقة جديدة: ${title}`,
+    metadata: { value },
+  });
+
   revalidatePath("/");
 }
 
@@ -55,6 +81,15 @@ export async function updateDealStage(dealId: string, stage: DealStage) {
 
   if (!DEAL_STAGES.includes(stage)) throw new Error("مرحلة غير صالحة");
 
+  const { data: existing, error: fetchError } = await supabase
+    .from("deals")
+    .select("stage, lead_id, title")
+    .eq("id", dealId)
+    .eq("org_id", orgId)
+    .single();
+
+  if (fetchError || !existing) throw new Error("الصفقة غير موجودة");
+
   const { error } = await supabase
     .from("deals")
     .update({ stage })
@@ -62,6 +97,16 @@ export async function updateDealStage(dealId: string, stage: DealStage) {
     .eq("org_id", orgId);
 
   if (error) throw new Error(error.message);
+
+  await logActivity({
+    orgId,
+    leadId: existing.lead_id,
+    dealId,
+    type: "deal_stage_changed",
+    description: `تغيّرت مرحلة الصفقة "${existing.title}" من ${existing.stage} إلى ${stage}`,
+    metadata: { from: existing.stage, to: stage },
+  });
+
   revalidatePath("/");
 }
 
@@ -78,15 +123,19 @@ export async function convertLeadToDeal(leadId: string) {
 
   if (leadError || !lead) throw new Error("العميل غير موجود");
 
-  const { error: dealError } = await supabase.from("deals").insert([
-    {
-      org_id: orgId,
-      lead_id: lead.id,
-      title: `${lead.company || lead.name} - Opportunité`,
-      value: 0,
-      stage: "discovery",
-    },
-  ]);
+  const { data: deal, error: dealError } = await supabase
+    .from("deals")
+    .insert([
+      {
+        org_id: orgId,
+        lead_id: lead.id,
+        title: `${lead.company || lead.name} - Opportunité`,
+        value: 0,
+        stage: "discovery",
+      },
+    ])
+    .select("id")
+    .single();
 
   if (dealError) throw new Error(dealError.message);
 
@@ -97,6 +146,14 @@ export async function convertLeadToDeal(leadId: string) {
     .eq("org_id", orgId);
 
   if (leadUpdateError) throw new Error(leadUpdateError.message);
+
+  await logActivity({
+    orgId,
+    leadId,
+    dealId: deal.id,
+    type: "lead_converted",
+    description: `تم تحويل العميل "${lead.name}" إلى صفقة`,
+  });
 
   revalidatePath("/");
 }
