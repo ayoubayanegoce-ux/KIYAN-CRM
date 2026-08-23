@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
-import { notifyAutoPilotSent } from "@/lib/whatsapp";
+import { notifyAutoPilotSentViaTelegram } from "@/lib/telegram";
 import { getBookingUrl, bookingCtaText, bookingCtaHtml } from "@/lib/booking";
 import { revalidatePath } from "next/cache";
 
@@ -72,7 +72,7 @@ export async function sendLeadEmail(
   });
 
   if (source === "autopilot") {
-    await notifyAutoPilotSent({ name: lead.name, company: lead.company ?? null }, subject);
+    await notifyAutoPilotSentViaTelegram(orgId, { name: lead.name, company: lead.company ?? null }, subject);
   }
 
   revalidatePath("/");

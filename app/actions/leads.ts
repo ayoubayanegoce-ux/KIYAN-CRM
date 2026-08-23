@@ -7,7 +7,7 @@ import { enrichCompanyProfile } from "@/lib/ai";
 import { parseCsv } from "@/lib/csv";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
-import { notifyHotLead } from "@/lib/whatsapp";
+import { notifyHotLeadViaTelegram } from "@/lib/telegram";
 import { revalidatePath } from "next/cache";
 
 export type ImportSkip = { row: number; reason: string };
@@ -93,7 +93,14 @@ export async function addLead(formData: FormData) {
   }
 
   if (ai_intent === "hot") {
-    await notifyHotLead({ name, email, company: company || null, ai_score, ai_intent, reasoning });
+    await notifyHotLeadViaTelegram(orgId, {
+      name,
+      email,
+      company: company || null,
+      ai_score,
+      ai_intent,
+      painPoints: enrichedData?.painPoints,
+    });
   }
 
   await maybeRunAutoPilot(orgId, {
@@ -199,13 +206,13 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
       }
 
       if (lead.ai_intent === "hot") {
-        await notifyHotLead({
+        await notifyHotLeadViaTelegram(orgId, {
           name: lead.name,
           email: lead.email,
           company: lead.company || null,
           ai_score: lead.ai_score,
           ai_intent: lead.ai_intent,
-          reasoning: lead.reasoning,
+          painPoints: lead.enrichedData?.painPoints,
         });
       }
 

@@ -4,21 +4,76 @@ import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
 import type { AITone, AILanguage } from "@/lib/ai";
-import { getTwilioConfigStatus, sendTestWhatsAppAlert, type TwilioConfigStatus } from "@/lib/whatsapp";
+import { sendTelegramMessage } from "@/lib/telegram";
 import { PLAN_QUOTAS, type PlanKey } from "@/lib/plans";
 
-export type { TwilioConfigStatus };
+export type TelegramSettings = {
+  enabled: boolean;
+  botToken: string;
+  chatId: string;
+};
 
-export async function checkTwilioStatus(): Promise<TwilioConfigStatus> {
+const DEFAULT_TELEGRAM_SETTINGS: TelegramSettings = { enabled: false, botToken: "", chatId: "" };
+
+export async function getTelegramSettings(): Promise<TelegramSettings> {
   const { orgId } = await auth();
-  if (!orgId) return { configured: false, missing: [] };
-  return getTwilioConfigStatus();
+  if (!orgId) return DEFAULT_TELEGRAM_SETTINGS;
+
+  const { data, error } = await supabase
+    .from("org_settings")
+    .select("telegram_enabled, telegram_bot_token, telegram_chat_id")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error || !data) return DEFAULT_TELEGRAM_SETTINGS;
+
+  return {
+    enabled: data.telegram_enabled ?? false,
+    botToken: data.telegram_bot_token ?? "",
+    chatId: data.telegram_chat_id ?? "",
+  };
 }
 
-export async function sendTestWhatsApp(): Promise<{ success: boolean; message: string }> {
+export async function setTelegramSettings(settings: TelegramSettings) {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
-  return sendTestWhatsAppAlert();
+
+  const { error } = await supabase.from("org_settings").upsert(
+    {
+      org_id: orgId,
+      telegram_enabled: settings.enabled,
+      telegram_bot_token: settings.botToken.trim() || null,
+      telegram_chat_id: settings.chatId.trim() || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "org_id" }
+  );
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
+/** يرمي رسالة خطأ حقيقية عند الفشل — زر اختبار يدوي، المستخدم يحتاج معرفة السبب الفعلي. */
+export async function sendTestTelegram(): Promise<{ success: boolean; message: string }> {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+
+  const settings = await getTelegramSettings();
+  if (!settings.botToken.trim() || !settings.chatId.trim()) {
+    return { success: false, message: "الرجاء إدخال Bot Token و Chat ID أولاً" };
+  }
+
+  try {
+    await sendTelegramMessage(
+      settings.botToken.trim(),
+      settings.chatId.trim(),
+      "✅ رسالة اختبار من KIYAN CRM — إشعارات Telegram تعمل بشكل صحيح."
+    );
+    return { success: true, message: "تم إرسال رسالة الاختبار بنجاح." };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "خطأ غير معروف";
+    return { success: false, message: `فشل الإرسال: ${detail}` };
+  }
 }
 
 export type { AITone, AILanguage };

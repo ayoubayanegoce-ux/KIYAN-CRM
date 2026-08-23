@@ -8,10 +8,8 @@ import {
   Save,
   Check,
   Link2,
-  MessageCircle,
+  Bell,
   Send,
-  CheckCircle2,
-  XCircle,
   Palette,
   CreditCard,
   ExternalLink,
@@ -19,14 +17,15 @@ import {
 import {
   getAISettings,
   setAISettings,
-  checkTwilioStatus,
-  sendTestWhatsApp,
+  getTelegramSettings,
+  setTelegramSettings,
+  sendTestTelegram,
   getBranding,
   setBranding,
   getSubscriptionInfo,
   type AITone,
   type AILanguage,
-  type TwilioConfigStatus,
+  type TelegramSettings,
   type BrandingSettings,
   type SubscriptionInfo,
 } from "@/app/actions/settings";
@@ -57,7 +56,11 @@ export default function SettingsModal() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [twilioStatus, setTwilioStatus] = useState<TwilioConfigStatus | null>(null);
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [isSavingTelegram, startTelegramSaveTransition] = useTransition();
+  const [telegramSaved, setTelegramSaved] = useState(false);
   const [isTesting, startTestTransition] = useTransition();
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -75,9 +78,9 @@ export default function SettingsModal() {
     setError(null);
     startLoadTransition(async () => {
       try {
-        const [settings, twilio, branding, sub] = await Promise.all([
+        const [settings, telegram, branding, sub] = await Promise.all([
           getAISettings(),
-          checkTwilioStatus(),
+          getTelegramSettings(),
           getBranding(),
           getSubscriptionInfo(),
         ]);
@@ -85,7 +88,9 @@ export default function SettingsModal() {
         setLanguage(settings.language);
         setValueProposition(settings.valueProposition);
         setBookingUrl(settings.bookingUrl);
-        setTwilioStatus(twilio);
+        setTelegramEnabled(telegram.enabled);
+        setTelegramBotToken(telegram.botToken);
+        setTelegramChatId(telegram.chatId);
         setOrgDisplayName(branding.orgDisplayName);
         setLogoUrl(branding.logoUrl);
         setBrandColor(branding.brandColor);
@@ -93,6 +98,20 @@ export default function SettingsModal() {
         setLoaded(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "فشل تحميل الإعدادات");
+      }
+    });
+  }
+
+  function handleSaveTelegram() {
+    setTestResult(null);
+    startTelegramSaveTransition(async () => {
+      try {
+        const settings: TelegramSettings = { enabled: telegramEnabled, botToken: telegramBotToken, chatId: telegramChatId };
+        await setTelegramSettings(settings);
+        setTelegramSaved(true);
+        setTimeout(() => setTelegramSaved(false), 2000);
+      } catch (e) {
+        setTestResult({ success: false, message: e instanceof Error ? e.message : "فشل حفظ إعدادات Telegram" });
       }
     });
   }
@@ -144,11 +163,11 @@ export default function SettingsModal() {
     });
   }
 
-  function handleTestWhatsApp() {
+  function handleTestTelegram() {
     setTestResult(null);
     startTestTransition(async () => {
       try {
-        const result = await sendTestWhatsApp();
+        const result = await sendTestTelegram();
         setTestResult(result);
       } catch (e) {
         setTestResult({ success: false, message: e instanceof Error ? e.message : "فشل الاختبار" });
@@ -278,38 +297,77 @@ export default function SettingsModal() {
                 {error && <p className="text-red-400 text-xs text-center">{error}</p>}
 
                 <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-                    <MessageCircle size={13} /> إشعارات واتساب (Twilio)
-                  </p>
-
-                  {twilioStatus && (
-                    <div
-                      className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg border ${
-                        twilioStatus.configured
-                          ? "bg-emerald-950 text-emerald-400 border-emerald-800"
-                          : "bg-amber-950 text-amber-400 border-amber-800"
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                      <Bell size={13} /> إشعارات الهاتف اللحظية (Instant Mobile Alerts)
+                    </p>
+                    <button
+                      onClick={() => setTelegramEnabled((v) => !v)}
+                      title="تفعيل إشعارات Telegram"
+                      className={`relative w-9 h-5 rounded-full transition cursor-pointer shrink-0 ${
+                        telegramEnabled ? "bg-blue-600" : "bg-slate-700"
                       }`}
                     >
-                      {twilioStatus.configured ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-                      {twilioStatus.configured
-                        ? "متغيرات Twilio مُعرَّفة بالكامل"
-                        : `ناقص: ${twilioStatus.missing.join(", ")}`}
-                    </div>
-                  )}
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${
+                          telegramEnabled ? "right-0.5" : "left-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
 
-                  <p className="text-[10px] text-slate-500">
-                    تُضبط مفاتيح Twilio عبر متغيرات البيئة (.env.local محلياً، أو إعدادات Vercel في
-                    الإنتاج) — وليس من هذه النافذة، للحفاظ على أمان الأسرار.
-                  </p>
+                  <div>
+                    <label className="text-[11px] text-slate-500 mb-1 block">Telegram Bot Token</label>
+                    <input
+                      value={telegramBotToken}
+                      onChange={(e) => setTelegramBotToken(e.target.value)}
+                      placeholder="123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono focus:outline-blue-500"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      أنشئ بوتاً واحصل على التوكن من <span className="font-mono text-slate-400">@BotFather</span> على
+                      تيليجرام.
+                    </p>
+                  </div>
 
-                  <button
-                    onClick={handleTestWhatsApp}
-                    disabled={isTesting || !twilioStatus?.configured}
-                    className="w-full py-2 bg-slate-800 hover:bg-emerald-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
-                  >
-                    {isTesting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    Envoyer un test WhatsApp
-                  </button>
+                  <div>
+                    <label className="text-[11px] text-slate-500 mb-1 block">Telegram Chat ID</label>
+                    <input
+                      value={telegramChatId}
+                      onChange={(e) => setTelegramChatId(e.target.value)}
+                      placeholder="123456789"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono focus:outline-blue-500"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      راسل <span className="font-mono text-slate-400">@userinfobot</span> على تيليجرام للحصول على
+                      معرّف محادثتك.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSaveTelegram}
+                      disabled={isSavingTelegram}
+                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingTelegram ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : telegramSaved ? (
+                        <Check size={13} />
+                      ) : (
+                        <Save size={13} />
+                      )}
+                      {telegramSaved ? "تم الحفظ" : "حفظ"}
+                    </button>
+                    <button
+                      onClick={handleTestTelegram}
+                      disabled={isTesting || !telegramBotToken.trim() || !telegramChatId.trim()}
+                      className="flex-1 py-2 bg-slate-800 hover:bg-blue-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                    >
+                      {isTesting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      رسالة تجريبية
+                    </button>
+                  </div>
 
                   {testResult && (
                     <p className={`text-[11px] text-center ${testResult.success ? "text-emerald-400" : "text-red-400"}`}>

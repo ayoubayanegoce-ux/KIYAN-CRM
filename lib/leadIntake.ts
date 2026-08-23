@@ -4,7 +4,7 @@ import { getCrmContext } from "@/lib/crmContext";
 import { hasAiQuota, incrementAiUsage } from "@/lib/quota";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
-import { notifyHotLead } from "@/lib/whatsapp";
+import { notifyHotLeadViaTelegram } from "@/lib/telegram";
 
 export type LeadIntakeSource = "webhook" | "public_form";
 
@@ -108,13 +108,13 @@ export async function createQualifiedLead(
   }
 
   if (ai_intent === "hot") {
-    await notifyHotLead({
+    await notifyHotLeadViaTelegram(orgId, {
       name: input.name,
       email: input.email,
       company: input.company || null,
       ai_score,
       ai_intent,
-      reasoning,
+      painPoints: enrichedData?.painPoints,
     });
   }
 
