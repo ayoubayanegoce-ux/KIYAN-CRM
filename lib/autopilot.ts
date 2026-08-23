@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { generateOutreachEmail, type AITone, type AILanguage } from "@/lib/ai";
+import { generateOutreachEmail, type AITone, type AILanguage, type CompanyProfile } from "@/lib/ai";
 import { getCrmContext } from "@/lib/crmContext";
 import { sendLeadEmail } from "@/lib/resend";
 
@@ -12,6 +12,7 @@ export type AutoPilotLead = {
   company: string | null;
   ai_score: number | null;
   ai_intent: string | null;
+  enrichedData?: CompanyProfile | null;
 };
 
 function isQualified(lead: AutoPilotLead): boolean {
@@ -42,6 +43,7 @@ export async function maybeRunAutoPilot(orgId: string, lead: AutoPilotLead): Pro
       language: (settings.ai_language as AILanguage) ?? undefined,
       valueProposition: settings.ai_value_proposition ?? undefined,
       companyContext,
+      enrichedData: lead.enrichedData,
     });
     if (!subject.trim() || !body.trim()) {
       console.error("Auto-Pilot: email generation returned empty content, skipping send");

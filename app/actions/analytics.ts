@@ -14,8 +14,10 @@ export async function getSalesInsight() {
     supabase.from("deals").select("deal_value, stage, win_probability").eq("org_id", orgId),
   ]);
 
-  if (leadsError) throw new Error(leadsError.message);
-  if (dealsError) throw new Error(dealsError.message);
+  // لا نرمي خطأ هنا: عمود مفقود (مثلاً بعد ترحيل SQL لم يُنفَّذ بعد) يجب أن
+  // يُنتج تحليلاً بلا بيانات كافية، لا أن يكسر زر "توليد التحليل" بالكامل.
+  if (leadsError) console.error("Error fetching leads for sales insight:", leadsError);
+  if (dealsError) console.error("Error fetching deals for sales insight:", dealsError);
 
   const stats = computeCrmStats(leads ?? [], deals ?? []);
   return generateSalesInsight(stats);

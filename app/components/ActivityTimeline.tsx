@@ -10,6 +10,7 @@ import {
   CalendarClock,
   CalendarCheck,
   PauseCircle,
+  Building2,
 } from "lucide-react";
 import type { Activity } from "@/app/actions/activities";
 
@@ -24,6 +25,7 @@ const TYPE_META: Record<string, { icon: ComponentType<{ size?: number }>; color:
   lead_converted: { icon: Handshake, color: "text-emerald-400" },
   meeting_scheduled: { icon: CalendarCheck, color: "text-teal-400" },
   sequence_paused: { icon: PauseCircle, color: "text-orange-400" },
+  company_enriched: { icon: Building2, color: "text-cyan-400" },
 };
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" });

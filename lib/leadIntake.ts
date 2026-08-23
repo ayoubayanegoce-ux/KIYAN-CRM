@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { qualifyLead } from "@/lib/ai";
+import { qualifyLead, enrichCompanyProfile } from "@/lib/ai";
 import { getCrmContext } from "@/lib/crmContext";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
@@ -37,12 +37,10 @@ export async function createQualifiedLead(
   source: LeadIntakeSource
 ): Promise<LeadIntakeResult> {
   const context = await getCrmContext();
-  const { ai_score, ai_intent, reasoning } = await qualifyLead(
-    input.name,
-    input.email,
-    input.company,
-    context
-  );
+  const [{ ai_score, ai_intent, reasoning }, enrichedData] = await Promise.all([
+    qualifyLead(input.name, input.email, input.company, context),
+    input.company.trim() ? enrichCompanyProfile(input.company) : Promise.resolve(null),
+  ]);
 
   const { data, error } = await supabase
     .from("leads")
@@ -55,6 +53,7 @@ export async function createQualifiedLead(
         status: "new",
         ai_score,
         ai_intent,
+        enriched_data: enrichedData,
       },
     ])
     .select("id")
@@ -75,6 +74,18 @@ export async function createQualifiedLead(
     description: `تقييم الذكاء الاصطناعي: ${ai_score}/100 (${ai_intent})`,
     metadata: { ai_score, ai_intent, reasoning },
   });
+
+  if (enrichedData?.industry || enrichedData?.companyModel) {
+    await logActivity({
+      orgId,
+      leadId: data.id,
+      type: "company_enriched",
+      description: `🏢 إثراء بيانات الشركة: ${enrichedData.industry || "قطاع غير محدد"} (${
+        enrichedData.companyModel || "نموذج غير معروف"
+      })`,
+      metadata: enrichedData,
+    });
+  }
 
   const trimmedNotes = input.notes?.trim();
   if (trimmedNotes) {
@@ -109,6 +120,7 @@ export async function createQualifiedLead(
     company: input.company,
     ai_score,
     ai_intent,
+    enrichedData,
   });
 
   return { id: data.id, ai_score, ai_intent };

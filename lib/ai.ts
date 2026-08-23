@@ -49,13 +49,40 @@ ${context ? `سياق شركتنا (استخدمه لتقييم مدى ملاء�
 export type AITone = "professionnel" | "amical" | "direct" | "negociation";
 export type AILanguage = "fr" | "en" | "ar";
 
+export type CompanyProfile = {
+  industry: string;
+  companyModel: string;
+  painPoints: string;
+  growthOpportunities: string;
+  icebreaker: string;
+};
+
 export type OutreachSettings = {
   tone?: AITone;
   language?: AILanguage;
   valueProposition?: string;
   /** سياق الشركة المقروء من CRM_CONTEXT.md، يُحقن كسياق أساسي إضافي */
   companyContext?: string;
+  /** ملف إثراء شركة العميل (enrichCompanyProfile) — يُستخدم لتخصيص الرسالة إن توفّر */
+  enrichedData?: CompanyProfile | null;
 };
+
+function enrichmentPromptBlock(settings?: OutreachSettings): string {
+  const data = settings?.enrichedData;
+  if (!data) return "";
+
+  const { industry, companyModel, painPoints, growthOpportunities, icebreaker } = data;
+  if (!industry && !companyModel && !painPoints && !growthOpportunities && !icebreaker) return "";
+
+  return (
+    `\nمعلومات إضافية عن شركة العميل (استخدمها لتخصيص الرسالة وجعلها أكثر دقة وملاءمة):\n` +
+    (industry ? `- القطاع: ${industry}\n` : "") +
+    (companyModel ? `- النموذج/الحجم: ${companyModel}\n` : "") +
+    (painPoints ? `- أبرز التحديات المتوقعة: ${painPoints}\n` : "") +
+    (growthOpportunities ? `- فرص النمو المحتملة: ${growthOpportunities}\n` : "") +
+    (icebreaker ? `- خطاف محادثة مقترح (يمكنك استخدامه أو تكييفه كافتتاحية للرسالة): ${icebreaker}\n` : "")
+  );
+}
 
 const TONE_DESCRIPTIONS: Record<AITone, string> = {
   professionnel: "احترافية ومهذبة (Professionnel)",
@@ -92,7 +119,7 @@ ${companyContext ? `\nسياق عملنا (Company Context):\n${companyContext}\
 - الاسم: ${name}
 - الشركة: ${company || "غير محدد"}
 - مستوى الاهتمام المقدَّر: ${intent || "cold"}
-${valueProposition ? `\nنبذة عن شركتنا (ادمج قيمتنا المقترحة بشكل طبيعي ضمن الرسالة):\n${valueProposition}\n` : ""}
+${valueProposition ? `\nنبذة عن شركتنا (ادمج قيمتنا المقترحة بشكل طبيعي ضمن الرسالة):\n${valueProposition}\n` : ""}${enrichmentPromptBlock(settings)}
 متطلبات الكتابة:
 - لغة الرسالة (العنوان والمتن بالكامل): ${LANGUAGE_NAMES[language]} فقط.
 - نبرة الرسالة: ${TONE_DESCRIPTIONS[tone]}.
@@ -199,7 +226,7 @@ export async function generateSequenceSteps(
 أنت خبير مبيعات B2B متخصص في بناء تسلسلات متابعة (Follow-up Sequences) فعّالة عبر البريد الإلكتروني.
 ${companyContext ? `\nسياق عملنا (Company Context):\n${companyContext}\n` : ""}${
       valueProposition ? `\nنبذة عن شركتنا:\n${valueProposition}\n` : ""
-    }
+    }${enrichmentPromptBlock(settings)}
 اكتب تسلسل متابعة من 3 رسائل بريد إلكتروني مستقلة للعميل المحتمل التالي، بالترتيب:
 - الاسم: ${name}
 - الشركة: ${company || "غير محدد"}
@@ -285,5 +312,72 @@ export async function generateSalesInsight(stats: CrmStats) {
       summary: "تعذر إنشاء التحليل الذكي حالياً. حاول مرة أخرى لاحقاً.",
       nextAction: "",
     };
+  }
+}
+
+const EMPTY_COMPANY_PROFILE: CompanyProfile = {
+  industry: "",
+  companyModel: "",
+  painPoints: "",
+  growthOpportunities: "",
+  icebreaker: "",
+};
+
+/**
+ * يحلل شركة العميل المحتمل بالاعتماد على اسمها (وملاحظات اختيارية) لتقدير
+ * قطاعها، نموذج عملها/حجمها، تحدياتها وفرص نموها المتوقعة، وخطاف محادثة
+ * مخصَّص لفتح الحوار. تقدير اجتهادي من Gemini وليس بيانات مؤكَّدة — لهذا نطلب
+ * صراحة تجنّب اختلاق أرقام أو حقائق دقيقة غير موثوقة، ونعرضه في الواجهة
+ * كـ "تقدير بالذكاء الاصطناعي".
+ */
+export async function enrichCompanyProfile(
+  companyName: string,
+  notes?: string
+): Promise<CompanyProfile> {
+  if (!companyName.trim()) {
+    return EMPTY_COMPANY_PROFILE;
+  }
+
+  try {
+    const prompt = `
+أنت محلل أعمال B2B خبير في تصنيف الشركات وتحليل نشاطها التجاري وفرصها.
+حلّل الشركة التالية:
+- اسم الشركة: ${companyName}
+${notes ? `- ملاحظات إضافية عنها: ${notes}\n` : ""}
+المطلوب:
+1. القطاع/المجال الأرجح لهذه الشركة (industry) — مثل SaaS أو E-commerce أو Logistics أو Retail أو تقنية مالية، إلخ.
+2. النموذج/الحجم التقديري (company_model) — تصنيف موجز مثل "B2B SME" أو "Enterprise" أو "Agency" أو "Startup" أو "غير معروف" إن تعذّر التقدير.
+3. أبرز التحديات المتوقعة (pain_points) — جملة أو جملتان عن أبرز نقاط الألم التي يُحتمل أن تواجهها شركة بهذا الحجم/القطاع.
+4. فرص النمو المحتملة (growth_opportunities) — جملة أو جملتان عن فرص تطوّر أو توسّع محتملة قد تهمّها.
+5. خطاف محادثة مخصَّص (icebreaker) — جملة افتتاحية واحدة قصيرة وطبيعية يمكن استخدامها لفتح رسالة تواصل بارد مع هذه الشركة تحديداً.
+
+مهم: إن لم تكن الشركة معروفة لديك بثقة، اجتهد بتقدير معقول بناءً على اسمها وأي ملاحظات مرفقة فقط، ولا تختلق حقائق محددة (أرقاماً مالية، تواريخ تأسيس، أسماء أشخاص) غير موثوقة.
+
+أرجع النتيجة بصيغة JSON نظيفة ومهيكلة فقط بهذا الشكل:
+{"industry": "...", "company_model": "...", "pain_points": "...", "growth_opportunities": "...", "icebreaker": "..."}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const resultText = response.text || "{}";
+    const data = JSON.parse(resultText);
+
+    return {
+      industry: typeof data.industry === "string" ? data.industry : "",
+      companyModel: typeof data.company_model === "string" ? data.company_model : "",
+      painPoints: typeof data.pain_points === "string" ? data.pain_points : "",
+      growthOpportunities:
+        typeof data.growth_opportunities === "string" ? data.growth_opportunities : "",
+      icebreaker: typeof data.icebreaker === "string" ? data.icebreaker : "",
+    };
+  } catch (error) {
+    console.error("AI Company Enrichment Error:", error);
+    return EMPTY_COMPANY_PROFILE;
   }
 }

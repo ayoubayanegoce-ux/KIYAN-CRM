@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import type { CompanyProfile } from "@/lib/ai";
 
 export type LeadRow = {
   id: string;
@@ -15,6 +16,7 @@ export type LeadRow = {
   ai_intent: string | null;
   sequence_status: string | null;
   sequence_step: number | null;
+  enriched_data: CompanyProfile | null;
   created_at: string;
 };
 

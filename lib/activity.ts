@@ -10,7 +10,8 @@ export type ActivityType =
   | "task_scheduled"
   | "lead_converted"
   | "meeting_scheduled"
-  | "sequence_paused";
+  | "sequence_paused"
+  | "company_enriched";
 
 /**
  * Internal-only logger — not a server action. Callers (other server actions,

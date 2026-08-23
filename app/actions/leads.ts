@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { qualifyLeadWithContext } from "@/app/actions/qualification";
+import { enrichCompanyProfile } from "@/lib/ai";
 import { parseCsv } from "@/lib/csv";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
@@ -40,8 +41,11 @@ export async function addLead(formData: FormData) {
   const email = formData.get("email") as string;
   const company = formData.get("company") as string;
 
-  // تشغيل وكيل الذكاء الاصطناعي لتقييم العميل فورياً
-  const { ai_score, ai_intent, reasoning } = await qualifyLeadWithContext(name, email, company);
+  // تشغيل وكيل التقييم وإثراء بيانات الشركة معاً (متوازيان — تحليلان مستقلان لا يعتمد أحدهما على الآخر)
+  const [{ ai_score, ai_intent, reasoning }, enrichedData] = await Promise.all([
+    qualifyLeadWithContext(name, email, company),
+    company.trim() ? enrichCompanyProfile(company) : Promise.resolve(null),
+  ]);
 
   const { data, error } = await supabase
     .from("leads")
@@ -54,6 +58,7 @@ export async function addLead(formData: FormData) {
         status: "new",
         ai_score,
         ai_intent,
+        enriched_data: enrichedData,
       },
     ])
     .select("id")
@@ -75,11 +80,31 @@ export async function addLead(formData: FormData) {
     metadata: { ai_score, ai_intent, reasoning },
   });
 
+  if (enrichedData?.industry || enrichedData?.companyModel) {
+    await logActivity({
+      orgId,
+      leadId: data.id,
+      type: "company_enriched",
+      description: `🏢 إثراء بيانات الشركة: ${enrichedData.industry || "قطاع غير محدد"} (${
+        enrichedData.companyModel || "نموذج غير معروف"
+      })`,
+      metadata: enrichedData,
+    });
+  }
+
   if (ai_intent === "hot") {
     await notifyHotLead({ name, email, company: company || null, ai_score, ai_intent, reasoning });
   }
 
-  await maybeRunAutoPilot(orgId, { id: data.id, name, email, company, ai_score, ai_intent });
+  await maybeRunAutoPilot(orgId, {
+    id: data.id,
+    name,
+    email,
+    company,
+    ai_score,
+    ai_intent,
+    enrichedData,
+  });
 
   revalidatePath("/");
 }
@@ -116,12 +141,11 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
 
   const qualified = await Promise.all(
     valid.map(async (lead) => {
-      const { ai_score, ai_intent, reasoning } = await qualifyLeadWithContext(
-        lead.name,
-        lead.email,
-        lead.company
-      );
-      return { ...lead, ai_score, ai_intent, reasoning };
+      const [{ ai_score, ai_intent, reasoning }, enrichedData] = await Promise.all([
+        qualifyLeadWithContext(lead.name, lead.email, lead.company),
+        lead.company ? enrichCompanyProfile(lead.company) : Promise.resolve(null),
+      ]);
+      return { ...lead, ai_score, ai_intent, reasoning, enrichedData };
     })
   );
 
@@ -137,6 +161,7 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
           status: "new",
           ai_score: lead.ai_score,
           ai_intent: lead.ai_intent,
+          enriched_data: lead.enrichedData,
         }))
       )
       .select("id");
@@ -161,6 +186,18 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
         metadata: { ai_score: lead.ai_score, ai_intent: lead.ai_intent, reasoning: lead.reasoning },
       });
 
+      if (lead.enrichedData?.industry || lead.enrichedData?.companyModel) {
+        await logActivity({
+          orgId,
+          leadId,
+          type: "company_enriched",
+          description: `🏢 إثراء بيانات الشركة: ${lead.enrichedData.industry || "قطاع غير محدد"} (${
+            lead.enrichedData.companyModel || "نموذج غير معروف"
+          })`,
+          metadata: lead.enrichedData,
+        });
+      }
+
       if (lead.ai_intent === "hot") {
         await notifyHotLead({
           name: lead.name,
@@ -179,6 +216,7 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
         company: lead.company,
         ai_score: lead.ai_score,
         ai_intent: lead.ai_intent,
+        enrichedData: lead.enrichedData,
       });
     }
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ArrowRightLeft, Download, Reply, Loader2 } from "lucide-react";
+import { ArrowRightLeft, Download, Reply, Loader2, Building2, Users2, AlertTriangle } from "lucide-react";
 import { useRealtimeLeads, type LeadRow } from "@/lib/hooks/useRealtimeLeads";
 import { convertLeadToDeal } from "@/app/actions/deals";
 import { markLeadReplied } from "@/app/actions/outreach";
@@ -58,6 +58,35 @@ export default function LeadsList({
                   <p className="text-xs text-slate-400 truncate">
                     {lead.email} {lead.company && `• ${lead.company}`}
                   </p>
+                  {lead.enriched_data && (
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {lead.enriched_data.industry && (
+                        <span
+                          title="القطاع (تقدير بالذكاء الاصطناعي)"
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-medium flex items-center gap-1"
+                        >
+                          <Building2 size={10} /> {lead.enriched_data.industry}
+                        </span>
+                      )}
+                      {lead.enriched_data.companyModel && (
+                        <span
+                          title="النموذج/الحجم (تقدير بالذكاء الاصطناعي)"
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium flex items-center gap-1"
+                        >
+                          <Users2 size={10} /> {lead.enriched_data.companyModel}
+                        </span>
+                      )}
+                      {lead.enriched_data.painPoints && (
+                        <span
+                          title={lead.enriched_data.painPoints}
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-400 border border-amber-800 font-medium flex items-center gap-1 max-w-[220px] truncate"
+                        >
+                          <AlertTriangle size={10} className="shrink-0" />
+                          <span className="truncate">{lead.enriched_data.painPoints}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
@@ -81,7 +110,7 @@ export default function LeadsList({
                   <OutreachModal leadId={lead.id} leadName={lead.name} />
                   <SequenceModal leadId={lead.id} leadName={lead.name} />
                   <NotesModal leadId={lead.id} leadName={lead.name} />
-                  <ActivityModal leadId={lead.id} leadName={lead.name} />
+                  <ActivityModal leadId={lead.id} leadName={lead.name} enrichedData={lead.enriched_data} />
 
                   {isContacted && (
                     <span className="text-xs px-2.5 py-1.5 rounded-lg bg-sky-950 text-sky-400 border border-sky-800 font-medium">

@@ -1,7 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { History, X, Loader2, Plus, CalendarClock, Check } from "lucide-react";
+import {
+  History,
+  X,
+  Loader2,
+  Plus,
+  CalendarClock,
+  Check,
+  Building2,
+  Users2,
+  Sparkles,
+  AlertTriangle,
+  TrendingUp,
+  MessageCircle,
+} from "lucide-react";
 import {
   getActivities,
   getTasks,
@@ -10,9 +23,18 @@ import {
   type Activity,
   type Task,
 } from "@/app/actions/activities";
+import type { CompanyProfile } from "@/lib/ai";
 import ActivityTimeline from "./ActivityTimeline";
 
-export default function ActivityModal({ leadId, leadName }: { leadId: string; leadName: string }) {
+export default function ActivityModal({
+  leadId,
+  leadName,
+  enrichedData,
+}: {
+  leadId: string;
+  leadName: string;
+  enrichedData?: CompanyProfile | null;
+}) {
   const [open, setOpen] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -101,6 +123,44 @@ export default function ActivityModal({ leadId, leadName }: { leadId: string; le
                 <X size={18} />
               </button>
             </div>
+
+            {enrichedData && (
+              <div className="space-y-2.5 p-3 bg-cyan-950/20 border border-cyan-900/50 rounded-lg">
+                <p className="text-xs font-medium text-cyan-400 flex items-center gap-1.5">
+                  <Sparkles size={13} /> ملف الشركة (تقدير بالذكاء الاصطناعي)
+                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {enrichedData.industry && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-medium flex items-center gap-1">
+                      <Building2 size={10} /> {enrichedData.industry}
+                    </span>
+                  )}
+                  {enrichedData.companyModel && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium flex items-center gap-1">
+                      <Users2 size={10} /> {enrichedData.companyModel}
+                    </span>
+                  )}
+                </div>
+                {enrichedData.painPoints && (
+                  <p className="text-xs text-slate-300 leading-relaxed flex items-start gap-1.5">
+                    <AlertTriangle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                    <span>{enrichedData.painPoints}</span>
+                  </p>
+                )}
+                {enrichedData.growthOpportunities && (
+                  <p className="text-xs text-slate-300 leading-relaxed flex items-start gap-1.5">
+                    <TrendingUp size={12} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <span>{enrichedData.growthOpportunities}</span>
+                  </p>
+                )}
+                {enrichedData.icebreaker && (
+                  <div className="p-2 bg-slate-950 border border-cyan-900/40 rounded-lg flex items-start gap-1.5">
+                    <MessageCircle size={12} className="text-cyan-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-slate-200 italic">&quot;{enrichedData.icebreaker}&quot;</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2 border-b border-slate-800 pb-4">
               <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">

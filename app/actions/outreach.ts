@@ -20,7 +20,7 @@ import { revalidatePath } from "next/cache";
 async function getLeadForOutreach(leadId: string, orgId: string) {
   const { data: lead, error } = await supabase
     .from("leads")
-    .select("name, company, ai_intent")
+    .select("name, company, ai_intent, enriched_data")
     .eq("id", leadId)
     .eq("org_id", orgId)
     .single();
@@ -41,6 +41,7 @@ export async function generateOutreachForLead(leadId: string) {
     language: settings.language,
     valueProposition: settings.valueProposition,
     companyContext,
+    enrichedData: lead.enriched_data,
   });
 }
 
@@ -56,6 +57,7 @@ export async function generateSequenceForLead(leadId: string): Promise<SequenceS
     language: settings.language,
     valueProposition: settings.valueProposition,
     companyContext,
+    enrichedData: lead.enriched_data,
   });
 }
 

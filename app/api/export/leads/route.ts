@@ -19,7 +19,19 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const headers = ["id", "name", "email", "company", "status", "ai_score", "ai_intent", "created_at"];
+  const headers = [
+    "id",
+    "name",
+    "email",
+    "company",
+    "industry",
+    "company_model",
+    "pain_points",
+    "status",
+    "ai_score",
+    "ai_intent",
+    "created_at",
+  ];
   const csv = rowsToCsv(
     headers,
     (data ?? []).map((lead) => ({
@@ -27,6 +39,9 @@ export async function GET() {
       name: lead.name,
       email: lead.email,
       company: lead.company ?? "",
+      industry: lead.enriched_data?.industry ?? "",
+      company_model: lead.enriched_data?.companyModel ?? "",
+      pain_points: lead.enriched_data?.painPoints ?? "",
       status: lead.status ?? "",
       ai_score: lead.ai_score ?? "",
       ai_intent: lead.ai_intent ?? "",
