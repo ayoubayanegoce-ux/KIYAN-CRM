@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { qualifyLead, enrichCompanyProfile } from "@/lib/ai";
 import { getCrmContext } from "@/lib/crmContext";
+import { hasAiQuota, incrementAiUsage } from "@/lib/quota";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
 import { notifyHotLead } from "@/lib/whatsapp";
@@ -36,11 +37,15 @@ export async function createQualifiedLead(
   input: LeadIntakeInput,
   source: LeadIntakeSource
 ): Promise<LeadIntakeResult> {
-  const context = await getCrmContext();
-  const [{ ai_score, ai_intent, reasoning }, enrichedData] = await Promise.all([
-    qualifyLead(input.name, input.email, input.company, context),
-    input.company.trim() ? enrichCompanyProfile(input.company) : Promise.resolve(null),
-  ]);
+  const quotaAvailable = await hasAiQuota(orgId);
+  const [{ ai_score, ai_intent, reasoning }, enrichedData] = quotaAvailable
+    ? await Promise.all([
+        getCrmContext(orgId).then((context) => qualifyLead(input.name, input.email, input.company, context)),
+        input.company.trim() ? enrichCompanyProfile(input.company) : Promise.resolve(null),
+      ])
+    : [{ ai_score: 0, ai_intent: "cold" as const, reasoning: "تم تجاوز الحصة الشهرية للذكاء الاصطناعي" }, null];
+
+  if (quotaAvailable) await incrementAiUsage(orgId);
 
   const { data, error } = await supabase
     .from("leads")

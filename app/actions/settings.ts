@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
 import type { AITone, AILanguage } from "@/lib/ai";
 import { getTwilioConfigStatus, sendTestWhatsAppAlert, type TwilioConfigStatus } from "@/lib/whatsapp";
+import { PLAN_QUOTAS, type PlanKey } from "@/lib/plans";
 
 export type { TwilioConfigStatus };
 
@@ -106,4 +107,140 @@ export async function setAutopilotSetting(enabled: boolean) {
 
   if (error) throw new Error(error.message);
   revalidatePath("/");
+}
+
+/** true = تعذّر التحقق أو لا توجد منظمة → لا نُظهر معالج الإعداد افتراضياً (فشل آمن، لا يحجب الواجهة). */
+export async function getOnboardingStatus(): Promise<boolean> {
+  const { orgId } = await auth();
+  if (!orgId) return true;
+
+  const { data, error } = await supabase
+    .from("org_settings")
+    .select("onboarding_completed")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching onboarding status:", error);
+    return true;
+  }
+  return data?.onboarding_completed ?? false;
+}
+
+export type OnboardingInput = {
+  orgDisplayName: string;
+  valueProposition: string;
+  icp: string;
+  bookingUrl: string;
+  tone: AITone;
+  language: AILanguage;
+};
+
+export async function completeOnboarding(input: OnboardingInput) {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+
+  const { error } = await supabase.from("org_settings").upsert(
+    {
+      org_id: orgId,
+      org_display_name: input.orgDisplayName.trim() || null,
+      ai_value_proposition: input.valueProposition.trim(),
+      icp: input.icp.trim() || null,
+      booking_url: input.bookingUrl.trim() || null,
+      ai_tone: input.tone,
+      ai_language: input.language,
+      onboarding_completed: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "org_id" }
+  );
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
+export type BrandingSettings = {
+  orgDisplayName: string;
+  logoUrl: string;
+  brandColor: string;
+};
+
+const DEFAULT_BRANDING: BrandingSettings = { orgDisplayName: "", logoUrl: "", brandColor: "" };
+
+export async function getBranding(): Promise<BrandingSettings> {
+  const { orgId } = await auth();
+  if (!orgId) return DEFAULT_BRANDING;
+
+  const { data, error } = await supabase
+    .from("org_settings")
+    .select("org_display_name, logo_url, brand_color")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error || !data) return DEFAULT_BRANDING;
+
+  return {
+    orgDisplayName: data.org_display_name ?? "",
+    logoUrl: data.logo_url ?? "",
+    brandColor: data.brand_color ?? "",
+  };
+}
+
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+export async function setBranding(settings: BrandingSettings) {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+
+  const brandColor = settings.brandColor.trim();
+  if (brandColor && !HEX_COLOR_PATTERN.test(brandColor)) {
+    throw new Error("صيغة اللون غير صحيحة — استخدم صيغة hex مثل ‎#2563eb");
+  }
+
+  const { error } = await supabase.from("org_settings").upsert(
+    {
+      org_id: orgId,
+      org_display_name: settings.orgDisplayName.trim() || null,
+      logo_url: settings.logoUrl.trim() || null,
+      brand_color: brandColor || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "org_id" }
+  );
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
+export type SubscriptionInfo = {
+  plan: PlanKey;
+  subscriptionStatus: string;
+  aiUsageCount: number;
+  aiMonthlyQuota: number;
+  hasStripeCustomer: boolean;
+};
+
+export async function getSubscriptionInfo(): Promise<SubscriptionInfo> {
+  const { orgId } = await auth();
+  if (!orgId) {
+    return { plan: "free", subscriptionStatus: "inactive", aiUsageCount: 0, aiMonthlyQuota: PLAN_QUOTAS.free, hasStripeCustomer: false };
+  }
+
+  const { data, error } = await supabase
+    .from("org_settings")
+    .select("plan, subscription_status, ai_usage_count, ai_monthly_quota, stripe_customer_id")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { plan: "free", subscriptionStatus: "inactive", aiUsageCount: 0, aiMonthlyQuota: PLAN_QUOTAS.free, hasStripeCustomer: false };
+  }
+
+  return {
+    plan: (data.plan as PlanKey) ?? "free",
+    subscriptionStatus: data.subscription_status ?? "inactive",
+    aiUsageCount: data.ai_usage_count ?? 0,
+    aiMonthlyQuota: data.ai_monthly_quota ?? PLAN_QUOTAS.free,
+    hasStripeCustomer: Boolean(data.stripe_customer_id),
+  };
 }

@@ -4,10 +4,12 @@ import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { computeCrmStats } from "@/lib/analytics";
 import { generateSalesInsight } from "@/lib/ai";
+import { assertAiQuota, incrementAiUsage } from "@/lib/quota";
 
 export async function getSalesInsight() {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  await assertAiQuota(orgId);
 
   const [{ data: leads, error: leadsError }, { data: deals, error: dealsError }] = await Promise.all([
     supabase.from("leads").select("ai_intent, status").eq("org_id", orgId),
@@ -20,5 +22,7 @@ export async function getSalesInsight() {
   if (dealsError) console.error("Error fetching deals for sales insight:", dealsError);
 
   const stats = computeCrmStats(leads ?? [], deals ?? []);
-  return generateSalesInsight(stats);
+  const insight = await generateSalesInsight(stats);
+  await incrementAiUsage(orgId);
+  return insight;
 }

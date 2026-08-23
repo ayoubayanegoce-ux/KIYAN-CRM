@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai";
 import { getAISettings } from "@/app/actions/settings";
 import { getCrmContext } from "@/lib/crmContext";
+import { assertAiQuota, incrementAiUsage } from "@/lib/quota";
 import { sendLeadEmail } from "@/lib/resend";
 import { getBookingUrl, bookingCtaText } from "@/lib/booking";
 import { logActivity } from "@/lib/activity";
@@ -32,33 +33,39 @@ async function getLeadForOutreach(leadId: string, orgId: string) {
 export async function generateOutreachForLead(leadId: string) {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  await assertAiQuota(orgId);
 
   const lead = await getLeadForOutreach(leadId, orgId);
-  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext()]);
+  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext(orgId)]);
 
-  return generateOutreachEmail(lead.name, lead.company, lead.ai_intent, {
+  const result = await generateOutreachEmail(lead.name, lead.company, lead.ai_intent, {
     tone: settings.tone,
     language: settings.language,
     valueProposition: settings.valueProposition,
     companyContext,
     enrichedData: lead.enriched_data,
   });
+  await incrementAiUsage(orgId);
+  return result;
 }
 
 export async function generateSequenceForLead(leadId: string): Promise<SequenceStep[]> {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  await assertAiQuota(orgId);
 
   const lead = await getLeadForOutreach(leadId, orgId);
-  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext()]);
+  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext(orgId)]);
 
-  return generateSequenceSteps(lead.name, lead.company, lead.ai_intent, {
+  const steps = await generateSequenceSteps(lead.name, lead.company, lead.ai_intent, {
     tone: settings.tone,
     language: settings.language,
     valueProposition: settings.valueProposition,
     companyContext,
     enrichedData: lead.enriched_data,
   });
+  await incrementAiUsage(orgId);
+  return steps;
 }
 
 /**

@@ -1,0 +1,104 @@
+import { NextResponse } from "next/server";
+import { Resend } from "resend";
+import { revalidatePath } from "next/cache";
+import { supabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity";
+import { SEQUENCE_TASK_PREFIX } from "@/lib/ai";
+
+const resend = new Resend(process.env.RESEND_API_KEY || "");
+
+/**
+ * يستقبل حدث email.received من Resend عند وصول رد من عميل. نفس منظمة
+ * الويب هوك الخارجي الافتراضية المستخدَمة في webhooks/calendly و
+ * webhooks/lead (WEBHOOK_DEFAULT_ORG_ID) — صندوق الرد الوارد واحد على
+ * مستوى المنصة، وليس لكل عميل. لا نعيد استخدام markLeadReplied (server
+ * action) لأنها تعتمد على Clerk auth() لجلسة مستخدم لا وجود لها هنا.
+ */
+export async function POST(request: Request) {
+  const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error("RESEND_WEBHOOK_SECRET غير مُعرَّف");
+    return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+  }
+
+  const rawBody = await request.text();
+
+  const svixId = request.headers.get("svix-id");
+  const svixTimestamp = request.headers.get("svix-timestamp");
+  const svixSignature = request.headers.get("svix-signature");
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    return NextResponse.json({ error: "Missing svix signature headers" }, { status: 400 });
+  }
+
+  let event;
+  try {
+    event = resend.webhooks.verify({
+      payload: rawBody,
+      headers: { id: svixId, timestamp: svixTimestamp, signature: svixSignature },
+      webhookSecret,
+    });
+  } catch (err) {
+    console.error("Resend inbound webhook signature verification failed:", err);
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  if (event.type !== "email.received") {
+    return NextResponse.json({ received: true, ignored: true });
+  }
+
+  const fromEmail = event.data.from?.trim().toLowerCase();
+  if (!fromEmail) {
+    return NextResponse.json({ received: true, matched: false });
+  }
+
+  const orgId = process.env.WEBHOOK_DEFAULT_ORG_ID;
+  if (!orgId) {
+    console.error("WEBHOOK_DEFAULT_ORG_ID غير مُعرَّف");
+    return NextResponse.json({ error: "Default organization not configured" }, { status: 503 });
+  }
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id, name")
+    .eq("org_id", orgId)
+    .eq("email", fromEmail)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!lead) {
+    console.error(`Resend inbound reply لبريد غير معروف لدينا: ${fromEmail}`);
+    return NextResponse.json({ received: true, matched: false });
+  }
+
+  await supabase
+    .from("leads")
+    .update({ sequence_status: "replied", status: "contacted" })
+    .eq("id", lead.id)
+    .eq("org_id", orgId);
+
+  const { data: pendingTasks } = await supabase
+    .from("tasks")
+    .select("id, title")
+    .eq("org_id", orgId)
+    .eq("lead_id", lead.id)
+    .eq("status", "pending");
+
+  const sequenceTaskIds = (pendingTasks ?? [])
+    .filter((t) => t.title.startsWith(SEQUENCE_TASK_PREFIX))
+    .map((t) => t.id);
+
+  if (sequenceTaskIds.length > 0) {
+    await supabase.from("tasks").update({ status: "cancelled" }).in("id", sequenceTaskIds);
+  }
+
+  await logActivity({
+    orgId,
+    leadId: lead.id,
+    type: "sequence_paused",
+    description: `✅ تم رصد رد العميل "${lead.name}" عبر البريد تلقائياً، وإيقاف تسلسل المتابعة`,
+  });
+
+  revalidatePath("/");
+  return NextResponse.json({ received: true, matched: true });
+}

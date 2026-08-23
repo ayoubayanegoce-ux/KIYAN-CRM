@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { generateOutreachEmail, type AITone, type AILanguage, type CompanyProfile } from "@/lib/ai";
 import { getCrmContext } from "@/lib/crmContext";
+import { hasAiQuota, incrementAiUsage } from "@/lib/quota";
 import { sendLeadEmail } from "@/lib/resend";
 
 const AUTO_PILOT_SCORE_THRESHOLD = 80;
@@ -36,8 +37,12 @@ export async function maybeRunAutoPilot(orgId: string, lead: AutoPilotLead): Pro
       .maybeSingle();
 
     if (!settings?.autopilot_enabled) return;
+    if (!(await hasAiQuota(orgId))) {
+      console.error("Auto-Pilot: AI quota exhausted for org, skipping send");
+      return;
+    }
 
-    const companyContext = await getCrmContext();
+    const companyContext = await getCrmContext(orgId);
     const { subject, body } = await generateOutreachEmail(lead.name, lead.company, lead.ai_intent, {
       tone: (settings.ai_tone as AITone) ?? undefined,
       language: (settings.ai_language as AILanguage) ?? undefined,
@@ -50,6 +55,7 @@ export async function maybeRunAutoPilot(orgId: string, lead: AutoPilotLead): Pro
       return;
     }
 
+    await incrementAiUsage(orgId);
     await sendLeadEmail(orgId, lead.id, subject, body, "autopilot");
   } catch (error) {
     console.error("Auto-Pilot send error:", error);

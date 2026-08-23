@@ -1,9 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
-import { SignInButton, SignUpButton, UserButton, OrganizationSwitcher } from "@clerk/nextjs";
+import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { PlusCircle, Download } from "lucide-react";
 import { getLeads, addLead } from "./actions/leads";
 import { getDeals, createDeal } from "./actions/deals";
-import { getAutopilotSetting } from "./actions/settings";
+import { getAutopilotSetting, getOnboardingStatus, getBranding } from "./actions/settings";
 import { computeCrmStats, computeTeamDistribution } from "@/lib/analytics";
 import { getAppUrl } from "@/lib/appUrl";
 import { getOrgMembers } from "@/lib/team";
@@ -13,14 +13,23 @@ import LeadsList from "./components/LeadsList";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import AutoPilotToggle from "./components/AutoPilotToggle";
 import SettingsModal from "./components/SettingsModal";
+import OnboardingWizard from "./components/OnboardingWizard";
+import LandingPage from "./components/LandingPage";
 
 export default async function Home() {
   const { userId, orgId } = await auth();
+
+  if (!userId) {
+    return <LandingPage />;
+  }
+
   const leads = orgId ? await getLeads() : [];
   const deals = orgId ? await getDeals() : [];
   const autopilotEnabled = orgId ? await getAutopilotSetting() : false;
   const appUrl = orgId ? await getAppUrl() : "";
   const members = orgId ? await getOrgMembers(orgId) : [];
+  const onboardingCompleted = orgId ? await getOnboardingStatus() : true;
+  const branding = orgId ? await getBranding() : { orgDisplayName: "", logoUrl: "", brandColor: "" };
   const stats = computeCrmStats(leads, deals);
   const teamDistribution = computeTeamDistribution(leads, deals, members);
 
@@ -155,56 +164,53 @@ export default async function Home() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* شريط التنقل العلوي */}
-        <header className="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl">
+        <header
+          className="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-xl"
+          style={branding.brandColor ? { borderBottomColor: branding.brandColor, borderBottomWidth: 2 } : undefined}
+        >
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🏢</span>
-            <h1 className="text-xl font-bold tracking-wide">B2B CRM AI</h1>
+            {branding.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logoUrl} alt={branding.orgDisplayName || "Logo"} className="h-8 w-8 rounded-lg object-cover" />
+            ) : (
+              <span className="text-2xl">🏢</span>
+            )}
+            <h1
+              className="text-xl font-bold tracking-wide"
+              style={branding.brandColor ? { color: branding.brandColor } : undefined}
+            >
+              {branding.orgDisplayName || "KIYAN CRM"}
+            </h1>
           </div>
 
-          {!userId ? (
-            <div className="flex gap-3">
-              <SignInButton mode="modal">
-                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition cursor-pointer">
-                  تسجيل الدخول
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition cursor-pointer">
-                  حساب جديد
-                </button>
-              </SignUpButton>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              {orgId && (
-                <div className="flex items-center gap-2" key={orgId}>
-                  <AutoPilotToggle initialEnabled={autopilotEnabled} />
-                  <SettingsModal />
-                </div>
-              )}
-              <OrganizationSwitcher afterCreateOrganizationUrl="/" afterSelectOrganizationUrl="/" />
-              <UserButton />
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {orgId && (
+              <div className="flex items-center gap-2" key={orgId}>
+                <AutoPilotToggle initialEnabled={autopilotEnabled} />
+                <SettingsModal />
+              </div>
+            )}
+            <OrganizationSwitcher afterCreateOrganizationUrl="/" afterSelectOrganizationUrl="/" />
+            <UserButton />
+          </div>
         </header>
 
         {/* مساحة العمل بعد تسجيل الدخول */}
-        {userId && (
+        {!orgId ? (
+          <div className="p-8 text-center bg-slate-900/60 border border-amber-500/30 rounded-xl">
+            <p className="text-amber-400 font-medium">
+              ⚠️ يُرجى تحديد أو إنشاء منظمة من الأعلى لعرض بيانات الـ CRM.
+            </p>
+          </div>
+        ) : (
           <>
-            {!orgId ? (
-              <div className="p-8 text-center bg-slate-900/60 border border-amber-500/30 rounded-xl">
-                <p className="text-amber-400 font-medium">
-                  ⚠️ يُرجى تحديد أو إنشاء منظمة من الأعلى لعرض بيانات الـ CRM.
-                </p>
-              </div>
-            ) : (
-              <DashboardTabs
-                key={orgId}
-                leadsContent={leadsContent}
-                pipelineContent={pipelineContent}
-                analyticsContent={analyticsContent}
-              />
-            )}
+            {!onboardingCompleted && <OnboardingWizard orgId={orgId} appUrl={appUrl} />}
+            <DashboardTabs
+              key={orgId}
+              leadsContent={leadsContent}
+              pipelineContent={pipelineContent}
+              analyticsContent={analyticsContent}
+            />
           </>
         )}
       </div>

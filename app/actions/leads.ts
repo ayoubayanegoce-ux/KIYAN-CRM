@@ -43,7 +43,7 @@ export async function addLead(formData: FormData) {
 
   // تشغيل وكيل التقييم وإثراء بيانات الشركة معاً (متوازيان — تحليلان مستقلان لا يعتمد أحدهما على الآخر)
   const [{ ai_score, ai_intent, reasoning }, enrichedData] = await Promise.all([
-    qualifyLeadWithContext(name, email, company),
+    qualifyLeadWithContext(name, email, company, orgId),
     company.trim() ? enrichCompanyProfile(company) : Promise.resolve(null),
   ]);
 
@@ -142,7 +142,7 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
   const qualified = await Promise.all(
     valid.map(async (lead) => {
       const [{ ai_score, ai_intent, reasoning }, enrichedData] = await Promise.all([
-        qualifyLeadWithContext(lead.name, lead.email, lead.company),
+        qualifyLeadWithContext(lead.name, lead.email, lead.company, orgId),
         lead.company ? enrichCompanyProfile(lead.company) : Promise.resolve(null),
       ]);
       return { ...lead, ai_score, ai_intent, reasoning, enrichedData };

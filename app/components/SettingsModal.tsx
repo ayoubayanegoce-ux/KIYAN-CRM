@@ -1,16 +1,36 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Settings, X, Loader2, Save, Check, Link2, MessageCircle, Send, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Settings,
+  X,
+  Loader2,
+  Save,
+  Check,
+  Link2,
+  MessageCircle,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Palette,
+  CreditCard,
+  ExternalLink,
+} from "lucide-react";
 import {
   getAISettings,
   setAISettings,
   checkTwilioStatus,
   sendTestWhatsApp,
+  getBranding,
+  setBranding,
+  getSubscriptionInfo,
   type AITone,
   type AILanguage,
   type TwilioConfigStatus,
+  type BrandingSettings,
+  type SubscriptionInfo,
 } from "@/app/actions/settings";
+import { PLAN_DISPLAY } from "@/lib/plans";
 
 const TONE_OPTIONS: { value: AITone; label: string }[] = [
   { value: "professionnel", label: "Professionnel" },
@@ -41,19 +61,66 @@ export default function SettingsModal() {
   const [isTesting, startTestTransition] = useTransition();
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  const [orgDisplayName, setOrgDisplayName] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [brandColor, setBrandColor] = useState("");
+  const [isSavingBrand, startBrandTransition] = useTransition();
+  const [brandSaved, setBrandSaved] = useState(false);
+  const [brandError, setBrandError] = useState<string | null>(null);
+
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [isOpeningPortal, startPortalTransition] = useTransition();
+
   function load() {
     setError(null);
     startLoadTransition(async () => {
       try {
-        const [settings, twilio] = await Promise.all([getAISettings(), checkTwilioStatus()]);
+        const [settings, twilio, branding, sub] = await Promise.all([
+          getAISettings(),
+          checkTwilioStatus(),
+          getBranding(),
+          getSubscriptionInfo(),
+        ]);
         setTone(settings.tone);
         setLanguage(settings.language);
         setValueProposition(settings.valueProposition);
         setBookingUrl(settings.bookingUrl);
         setTwilioStatus(twilio);
+        setOrgDisplayName(branding.orgDisplayName);
+        setLogoUrl(branding.logoUrl);
+        setBrandColor(branding.brandColor);
+        setSubscription(sub);
         setLoaded(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "فشل تحميل الإعدادات");
+      }
+    });
+  }
+
+  function handleSaveBranding() {
+    setBrandError(null);
+    setBrandSaved(false);
+    startBrandTransition(async () => {
+      try {
+        const settings: BrandingSettings = { orgDisplayName, logoUrl, brandColor };
+        await setBranding(settings);
+        setBrandSaved(true);
+        setTimeout(() => setBrandSaved(false), 2000);
+      } catch (e) {
+        setBrandError(e instanceof Error ? e.message : "فشل حفظ العلامة التجارية");
+      }
+    });
+  }
+
+  function handleManageBilling() {
+    startPortalTransition(async () => {
+      try {
+        const res = await fetch("/api/stripe/portal", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "فشل فتح بوابة الفوترة");
+        window.open(data.url, "_blank", "noopener,noreferrer");
+      } catch (e) {
+        setBrandError(e instanceof Error ? e.message : "فشل فتح بوابة الفوترة");
       }
     });
   }
@@ -248,6 +315,101 @@ export default function SettingsModal() {
                     <p className={`text-[11px] text-center ${testResult.success ? "text-emerald-400" : "text-red-400"}`}>
                       {testResult.message}
                     </p>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                    <Palette size={13} /> العلامة التجارية (White-Label)
+                  </p>
+                  <div>
+                    <label className="text-[11px] text-slate-500 mb-1 block">اسم المنظمة المعروض</label>
+                    <input
+                      value={orgDisplayName}
+                      onChange={(e) => setOrgDisplayName(e.target.value)}
+                      placeholder="KIYAN Solutions"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm focus:outline-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-500 mb-1 block">رابط الشعار (Logo URL)</label>
+                    <input
+                      type="url"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                      placeholder="https://example.com/logo.png"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm focus:outline-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-500 mb-1 block">اللون الرئيسي (hex)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={brandColor}
+                        onChange={(e) => setBrandColor(e.target.value)}
+                        placeholder="#2563eb"
+                        className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm focus:outline-blue-500 font-mono"
+                      />
+                      {/^#[0-9a-fA-F]{6}$/.test(brandColor) && (
+                        <span
+                          className="w-8 h-8 rounded-lg border border-slate-700 shrink-0"
+                          style={{ backgroundColor: brandColor }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSaveBranding}
+                    disabled={isSavingBrand}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingBrand ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : brandSaved ? (
+                      <Check size={13} />
+                    ) : (
+                      <Save size={13} />
+                    )}
+                    {brandSaved ? "تم الحفظ" : "حفظ العلامة التجارية"}
+                  </button>
+                  {brandError && <p className="text-red-400 text-[11px] text-center">{brandError}</p>}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                    <CreditCard size={13} /> الاشتراك والفوترة
+                  </p>
+                  {subscription && (
+                    <>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400">الخطة الحالية</span>
+                        <span className="text-slate-200 font-medium">
+                          {PLAN_DISPLAY[subscription.plan].name}
+                          {subscription.plan !== "free" && ` — $${PLAN_DISPLAY[subscription.plan].priceUsd}/mo`}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400">استخدام الذكاء الاصطناعي هذا الشهر</span>
+                        <span className="text-slate-200 font-mono">
+                          {subscription.aiUsageCount}
+                          {subscription.aiMonthlyQuota > 0 ? ` / ${subscription.aiMonthlyQuota}` : " (بلا حد أقصى)"}
+                        </span>
+                      </div>
+                      {subscription.hasStripeCustomer && (
+                        <button
+                          onClick={handleManageBilling}
+                          disabled={isOpeningPortal}
+                          className="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                        >
+                          {isOpeningPortal ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <ExternalLink size={13} />
+                          )}
+                          إدارة الفواتير وبطاقة الدفع
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
