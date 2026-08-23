@@ -3,6 +3,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
+import { getStripeClient } from "@/lib/stripe";
+import { getAppUrl } from "@/lib/appUrl";
 import { revalidatePath } from "next/cache";
 
 export type DealStage =
@@ -13,6 +15,8 @@ export type DealStage =
   | "won"
   | "lost";
 
+export type PaymentStatus = "unpaid" | "pending" | "paid" | "failed";
+
 export type DealRow = {
   id: string;
   org_id: string;
@@ -21,6 +25,9 @@ export type DealRow = {
   deal_value: number;
   win_probability: number | null;
   stage: DealStage;
+  payment_status: PaymentStatus;
+  stripe_checkout_url: string | null;
+  stripe_checkout_session_id: string | null;
   created_at: string;
   leads?: {
     name: string;
@@ -187,4 +194,76 @@ export async function convertLeadToDeal(leadId: string) {
   });
 
   revalidatePath("/");
+}
+
+/**
+ * ينشئ رابط دفع Stripe Checkout (Session-hosted، بدون Stripe.js على العميل)
+ * لصفقة موجودة، ويحفظ معرّف الجلسة والرابط على الصفقة بحالة "pending" —
+ * التأكيد الفعلي للدفع (تحويل الحالة إلى "paid") يتم حصراً عبر الويب هوك
+ * (app/api/webhooks/stripe)، وليس من هذا الإجراء ولا من صفحة النجاح.
+ */
+export async function createDealCheckoutSession(dealId: string): Promise<{ url: string }> {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+
+  const stripe = getStripeClient();
+  if (!stripe) throw new Error("Stripe غير مُهيَّأ: أضف STRIPE_SECRET_KEY في .env.local");
+
+  const { data: deal, error } = await supabase
+    .from("deals")
+    .select("id, title, deal_value, leads(email, name)")
+    .eq("id", dealId)
+    .eq("org_id", orgId)
+    .single();
+
+  if (error || !deal) throw new Error("الصفقة غير موجودة");
+  if (!deal.deal_value || Number(deal.deal_value) <= 0) {
+    throw new Error("قيمة الصفقة يجب أن تكون أكبر من صفر لإنشاء رابط دفع");
+  }
+
+  const appUrl = await getAppUrl();
+  const lead = Array.isArray(deal.leads) ? deal.leads[0] : deal.leads;
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        price_data: {
+          currency: "eur",
+          unit_amount: Math.round(Number(deal.deal_value) * 100),
+          product_data: { name: deal.title },
+        },
+        quantity: 1,
+      },
+    ],
+    customer_email: lead?.email || undefined,
+    success_url: `${appUrl}/?payment=success`,
+    cancel_url: `${appUrl}/?payment=cancelled`,
+    metadata: { deal_id: dealId, org_id: orgId },
+  });
+
+  if (!session.url) throw new Error("تعذّر إنشاء رابط الدفع");
+
+  const { error: updateError } = await supabase
+    .from("deals")
+    .update({
+      stripe_checkout_session_id: session.id,
+      stripe_checkout_url: session.url,
+      payment_status: "pending",
+    })
+    .eq("id", dealId)
+    .eq("org_id", orgId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  await logActivity({
+    orgId,
+    dealId,
+    type: "payment_link_created",
+    description: `💳 تم إنشاء رابط دفع Stripe للصفقة "${deal.title}"`,
+    metadata: { stripe_session_id: session.id, amount: deal.deal_value },
+  });
+
+  revalidatePath("/");
+  return { url: session.url };
 }

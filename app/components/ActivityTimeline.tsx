@@ -12,6 +12,9 @@ import {
   PauseCircle,
   Building2,
   UserCog,
+  CreditCard,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import type { Activity } from "@/app/actions/activities";
 
@@ -28,6 +31,9 @@ const TYPE_META: Record<string, { icon: ComponentType<{ size?: number }>; color:
   sequence_paused: { icon: PauseCircle, color: "text-orange-400" },
   company_enriched: { icon: Building2, color: "text-cyan-400" },
   lead_assigned: { icon: UserCog, color: "text-indigo-400" },
+  payment_link_created: { icon: CreditCard, color: "text-violet-400" },
+  payment_received: { icon: CheckCircle2, color: "text-emerald-400" },
+  payment_failed: { icon: XCircle, color: "text-red-400" },
 };
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" });

@@ -12,7 +12,10 @@ export type ActivityType =
   | "meeting_scheduled"
   | "sequence_paused"
   | "company_enriched"
-  | "lead_assigned";
+  | "lead_assigned"
+  | "payment_link_created"
+  | "payment_received"
+  | "payment_failed";
 
 /**
  * Internal-only logger — not a server action. Callers (other server actions,

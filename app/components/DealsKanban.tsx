@@ -1,8 +1,8 @@
 "use client";
 
 import { useOptimistic, useState, useTransition } from "react";
-import { GripVertical } from "lucide-react";
-import { updateDealStage, type DealStage, type DealRow } from "@/app/actions/deals";
+import { GripVertical, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { updateDealStage, createDealCheckoutSession, type DealStage, type DealRow } from "@/app/actions/deals";
 import { useRealtimeDeals } from "@/lib/hooks/useRealtimeDeals";
 
 const STAGES: { key: DealStage; label: string; accent: string }[] = [
@@ -117,6 +117,13 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
                           🎯 {deal.win_probability ?? 50}%
                         </span>
                       </div>
+                      <div className="mt-2">
+                        <PaymentAction
+                          dealId={deal.id}
+                          paymentStatus={deal.payment_status}
+                          checkoutUrl={deal.stripe_checkout_url}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -130,6 +137,74 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PaymentAction({
+  dealId,
+  paymentStatus,
+  checkoutUrl,
+}: {
+  dealId: string;
+  paymentStatus: DealRow["payment_status"];
+  checkoutUrl: string | null;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleCreateLink() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const { url } = await createDealCheckoutSession(dealId);
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "فشل إنشاء رابط الدفع");
+      }
+    });
+  }
+
+  if (paymentStatus === "paid") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-medium">
+        <CheckCircle2 size={11} /> Payée
+      </span>
+    );
+  }
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} title={error ?? undefined}>
+      {paymentStatus === "pending" && checkoutUrl ? (
+        <a
+          href={checkoutUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-violet-700 text-slate-300 hover:text-white transition cursor-pointer font-medium"
+        >
+          <ExternalLink size={11} /> Lien de paiement
+        </a>
+      ) : (
+        <button
+          onClick={handleCreateLink}
+          disabled={isPending}
+          className={`inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg font-medium transition cursor-pointer disabled:opacity-50 ${
+            paymentStatus === "failed"
+              ? "bg-red-950 hover:bg-red-900 text-red-400 border border-red-800"
+              : "bg-slate-800 hover:bg-violet-700 text-slate-300 hover:text-white"
+          }`}
+        >
+          {isPending ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : paymentStatus === "failed" ? (
+            <AlertCircle size={11} />
+          ) : (
+            <CreditCard size={11} />
+          )}
+          {paymentStatus === "failed" ? "إعادة محاولة الدفع" : "Créer un lien de paiement"}
+        </button>
+      )}
+      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
     </div>
   );
 }
