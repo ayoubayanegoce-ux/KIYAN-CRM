@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getStripeClient } from "@/lib/stripe";
 import { getAppUrl } from "@/lib/appUrl";
 import { supabase } from "@/lib/supabase";
-import { priceIdForPlan, isPlanKey } from "@/lib/plans";
+import { priceIdForPlan, planFromPriceId, isPlanKey, type PlanKey } from "@/lib/plans";
 
 /**
  * ينشئ جلسة اشتراك Stripe (mode: "subscription") لخطة Starter/Pro/Enterprise.
@@ -21,21 +21,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Stripe غير مُهيَّأ: أضف STRIPE_SECRET_KEY" }, { status: 503 });
   }
 
-  let body: { plan?: string };
+  let body: { plan?: string; priceId?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 });
   }
 
-  const plan = body.plan;
-  if (!plan || !isPlanKey(plan)) {
-    return NextResponse.json({ error: "خطة غير صالحة" }, { status: 400 });
+  // يقبل plan (يُحوَّل لمعرّف سعر عبر priceIdForPlan، مع fallback ثابت دائماً
+  // متاح) أو priceId مباشرة — أياً كان المصدر، planFromPriceId يستخدم نفس
+  // جدول priceIdForPlan فيبقى الويب هوك قادراً على التعرّف على الخطة لاحقاً.
+  let priceId = body.priceId?.trim();
+  let plan: Exclude<PlanKey, "free"> | undefined = body.plan && isPlanKey(body.plan) ? body.plan : undefined;
+
+  if (!priceId && plan) {
+    priceId = priceIdForPlan(plan);
+  } else if (priceId && !plan) {
+    const resolved = planFromPriceId(priceId);
+    if (resolved !== "free") plan = resolved;
   }
 
-  const priceId = priceIdForPlan(plan);
   if (!priceId) {
-    return NextResponse.json({ error: `معرّف السعر لخطة ${plan} غير مُعرَّف` }, { status: 503 });
+    return NextResponse.json({ error: "يجب تحديد plan صالح (starter/pro/enterprise) أو priceId" }, { status: 400 });
   }
 
   const { data: settings } = await supabase
@@ -45,6 +52,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   const appUrl = await getAppUrl();
+  const planMetadata = plan ?? "custom";
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -53,8 +61,8 @@ export async function POST(request: Request) {
     success_url: `${appUrl}/?subscribed=success`,
     cancel_url: `${appUrl}/?subscribed=cancelled`,
     client_reference_id: orgId,
-    metadata: { org_id: orgId, plan },
-    subscription_data: { metadata: { org_id: orgId, plan } },
+    metadata: { org_id: orgId, plan: planMetadata },
+    subscription_data: { metadata: { org_id: orgId, plan: planMetadata } },
   });
 
   if (!session.url) {
