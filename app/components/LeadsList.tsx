@@ -6,6 +6,7 @@ import { convertLeadToDeal } from "@/app/actions/deals";
 import OutreachModal from "./OutreachModal";
 import NotesModal from "./NotesModal";
 import ActivityModal from "./ActivityModal";
+import SequenceModal from "./SequenceModal";
 import ImportLeadsButton from "./ImportLeadsButton";
 
 const QUALIFIED_INTENTS = ["hot", "warm"];
@@ -74,6 +75,7 @@ export default function LeadsList({
                   </span>
 
                   <OutreachModal leadId={lead.id} leadName={lead.name} />
+                  <SequenceModal leadId={lead.id} leadName={lead.name} />
                   <NotesModal leadId={lead.id} leadName={lead.name} />
                   <ActivityModal leadId={lead.id} leadName={lead.name} />
 

@@ -13,10 +13,19 @@ export type DealRow = {
   lead_id: string | null;
   title: string;
   value: number;
+  win_probability: number | null;
   stage: DealStage;
   created_at: string;
   leads?: { name: string; company: string | null; email: string } | null;
 };
+
+const DEFAULT_WIN_PROBABILITY = 50;
+
+function clampProbability(raw: FormDataEntryValue | null): number {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return DEFAULT_WIN_PROBABILITY;
+  return Math.min(100, Math.max(0, Math.round(num)));
+}
 
 const DEAL_STAGES: DealStage[] = ["discovery", "proposal", "negotiation", "won", "lost"];
 
@@ -44,6 +53,7 @@ export async function createDeal(formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
   const leadId = (formData.get("lead_id") as string) || null;
   const value = Number(formData.get("value")) || 0;
+  const winProbability = clampProbability(formData.get("win_probability"));
 
   if (!title) throw new Error("عنوان الصفقة مطلوب");
 
@@ -55,6 +65,7 @@ export async function createDeal(formData: FormData) {
         lead_id: leadId,
         title,
         value,
+        win_probability: winProbability,
         stage: "discovery",
       },
     ])
@@ -69,7 +80,7 @@ export async function createDeal(formData: FormData) {
     dealId: data.id,
     type: "deal_created",
     description: `تم إنشاء صفقة جديدة: ${title}`,
-    metadata: { value },
+    metadata: { value, win_probability: winProbability },
   });
 
   revalidatePath("/");
@@ -131,6 +142,7 @@ export async function convertLeadToDeal(leadId: string) {
         lead_id: lead.id,
         title: `${lead.company || lead.name} - Opportunité`,
         value: 0,
+        win_probability: DEFAULT_WIN_PROBABILITY,
         stage: "discovery",
       },
     ])

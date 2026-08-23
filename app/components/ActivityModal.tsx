@@ -137,7 +137,10 @@ export default function ActivityModal({ leadId, leadName }: { leadId: string; le
                     >
                       <div className="min-w-0">
                         <p className="text-xs text-slate-300 truncate">{t.title}</p>
-                        <p className="text-[10px] text-slate-500 font-mono">استحقاق: {t.due_date}</p>
+                        {t.description && (
+                          <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{t.description}</p>
+                        )}
+                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">استحقاق: {t.due_date}</p>
                       </div>
                       <button
                         onClick={() => handleComplete(t.id)}

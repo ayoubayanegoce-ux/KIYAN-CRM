@@ -117,6 +117,18 @@ export default async function Home() {
               className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg focus:outline-blue-500 text-sm"
             />
           </div>
+          <div className="w-28">
+            <label className="text-xs text-slate-400">احتمال الفوز (%)</label>
+            <input
+              name="win_probability"
+              type="number"
+              min="0"
+              max="100"
+              step="5"
+              defaultValue="50"
+              className="w-full mt-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg focus:outline-blue-500 text-sm"
+            />
+          </div>
           <button
             type="submit"
             className="py-2 px-4 bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm transition cursor-pointer flex items-center gap-2"

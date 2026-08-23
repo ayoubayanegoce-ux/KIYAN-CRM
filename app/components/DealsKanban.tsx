@@ -82,7 +82,9 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
                 {stageDeals.length}
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono">{currency.format(total)} €</p>
+            <p className="text-xs text-slate-400 font-mono">
+              الإجمالي: <strong className="text-slate-200">{currency.format(total)} €</strong>
+            </p>
 
             <div className="flex flex-col gap-2 flex-1 mt-1">
               {stageDeals.map((deal) => (
@@ -106,9 +108,14 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
                           {deal.leads.company ? ` • ${deal.leads.company}` : ""}
                         </p>
                       )}
-                      <p className="text-xs text-emerald-400 font-mono mt-1">
-                        {currency.format(Number(deal.value) || 0)} €
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-emerald-400 font-mono">
+                          {currency.format(Number(deal.value) || 0)} €
+                        </p>
+                        <span className="text-[10px] text-amber-400 font-mono bg-amber-950/40 px-1.5 py-0.5 rounded">
+                          🎯 {deal.win_probability ?? 50}%
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

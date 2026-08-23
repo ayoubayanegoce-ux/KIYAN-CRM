@@ -129,6 +129,118 @@ ${valueProposition ? `\nنبذة عن شركتنا (ادمج قيمتنا الم
   }
 }
 
+export type SequenceStepLabel = "initial_pitch" | "value_followup" | "breakup";
+
+export type SequenceStep = {
+  step: 1 | 2 | 3;
+  label: SequenceStepLabel;
+  delayDays: number;
+  subject: string;
+  body: string;
+};
+
+export const SEQUENCE_STEP_LABELS_AR: Record<SequenceStepLabel, string> = {
+  initial_pitch: "الطرح الأولي",
+  value_followup: "متابعة القيمة المضافة",
+  breakup: "رسالة الختام",
+};
+
+const SEQUENCE_STEP_META: { label: SequenceStepLabel; delayDays: number; instructionsAr: string }[] = [
+  {
+    label: "initial_pitch",
+    delayDays: 0,
+    instructionsAr:
+      "رسالة الطرح الأولي (Initial Pitch) — تعريف مختصر بنا وبقيمتنا المقترحة، ودعوة واضحة لمكالمة قصيرة.",
+  },
+  {
+    label: "value_followup",
+    delayDays: 3,
+    instructionsAr:
+      "رسالة متابعة قيمة مضافة (Value Follow-up)، تُرسَل بعد 3 أيام من عدم الرد — أضف زاوية جديدة أو معلومة/حالة دراسة سريعة (quick case study) ذات صلة، بدون تكرار الرسالة الأولى.",
+  },
+  {
+    label: "breakup",
+    delayDays: 7,
+    instructionsAr:
+      "رسالة ختام سريعة (Break-up / Quick Question)، تُرسَل بعد 7 أيام من عدم الرد — قصيرة جداً، سؤال مباشر واحد، تفتح الباب للرد دون ضغط.",
+  },
+];
+
+/**
+ * يولّد تسلسل متابعة من 3 رسائل بريد إلكتروني متتالية (طرح أولي، متابعة قيمة
+ * مضافة بعد 3 أيام، ختام سريع بعد 7 أيام)، مبنية على نفس سياق الشركة/النبرة/
+ * اللغة المستخدَمة في generateOutreachEmail.
+ */
+export async function generateSequenceSteps(
+  name: string,
+  company: string | null,
+  intent: string | null,
+  settings?: OutreachSettings
+): Promise<SequenceStep[]> {
+  const tone = settings?.tone ?? DEFAULT_TONE;
+  const language = settings?.language ?? DEFAULT_LANGUAGE;
+  const valueProposition = settings?.valueProposition?.trim();
+  const companyContext = settings?.companyContext?.trim();
+
+  const fallbackSteps = (): SequenceStep[] =>
+    SEQUENCE_STEP_META.map((meta, idx) => ({
+      step: (idx + 1) as 1 | 2 | 3,
+      label: meta.label,
+      delayDays: meta.delayDays,
+      subject: "",
+      body: "تعذّر توليد هذه الرسالة، حاول مرة أخرى.",
+    }));
+
+  try {
+    const prompt = `
+أنت خبير مبيعات B2B متخصص في بناء تسلسلات متابعة (Follow-up Sequences) فعّالة عبر البريد الإلكتروني.
+${companyContext ? `\nسياق عملنا (Company Context):\n${companyContext}\n` : ""}${
+      valueProposition ? `\nنبذة عن شركتنا:\n${valueProposition}\n` : ""
+    }
+اكتب تسلسل متابعة من 3 رسائل بريد إلكتروني مستقلة للعميل المحتمل التالي، بالترتيب:
+- الاسم: ${name}
+- الشركة: ${company || "غير محدد"}
+- مستوى الاهتمام المقدَّر: ${intent || "cold"}
+
+الرسائل المطلوبة بالترتيب:
+1. ${SEQUENCE_STEP_META[0].instructionsAr}
+2. ${SEQUENCE_STEP_META[1].instructionsAr}
+3. ${SEQUENCE_STEP_META[2].instructionsAr}
+
+متطلبات كل رسالة:
+- لغة الرسالة (العنوان والمتن): ${LANGUAGE_NAMES[language]} فقط.
+- نبرة الرسالة: ${TONE_DESCRIPTIONS[tone]}.
+- مختصرة (لا تتجاوز 120 كلمة)، ولا تكرر نص الرسالة السابقة.
+
+أرجع النتيجة بصيغة JSON فقط بهذا الشكل، بنفس الترتيب (3 عناصر بالضبط):
+{"steps": [{"subject": "...", "body": "..."}, {"subject": "...", "body": "..."}, {"subject": "...", "body": "..."}]}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const resultText = response.text || "{}";
+    const data = JSON.parse(resultText);
+    const rawSteps = Array.isArray(data.steps) ? data.steps : [];
+
+    return SEQUENCE_STEP_META.map((meta, idx) => ({
+      step: (idx + 1) as 1 | 2 | 3,
+      label: meta.label,
+      delayDays: meta.delayDays,
+      subject: typeof rawSteps[idx]?.subject === "string" ? rawSteps[idx].subject : "",
+      body: typeof rawSteps[idx]?.body === "string" ? rawSteps[idx].body : "",
+    }));
+  } catch (error) {
+    console.error("AI Sequence Generation Error:", error);
+    return fallbackSteps();
+  }
+}
+
 export async function generateSalesInsight(stats: CrmStats) {
   try {
     const prompt = `

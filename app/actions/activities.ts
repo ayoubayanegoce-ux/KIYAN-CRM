@@ -24,6 +24,7 @@ export type Task = {
   lead_id: string | null;
   deal_id: string | null;
   title: string;
+  description: string | null;
   due_date: string;
   status: TaskStatus;
   created_at: string;
@@ -65,7 +66,12 @@ export async function getTasks(leadId: string): Promise<Task[]> {
   return data;
 }
 
-export async function addFollowUpTask(leadId: string, title: string, dueDate: string) {
+export async function addFollowUpTask(
+  leadId: string,
+  title: string,
+  dueDate: string,
+  description?: string
+) {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
 
@@ -87,6 +93,7 @@ export async function addFollowUpTask(leadId: string, title: string, dueDate: st
       org_id: orgId,
       lead_id: leadId,
       title: trimmedTitle,
+      description: description?.trim() || null,
       due_date: dueDate,
       status: "pending",
     },

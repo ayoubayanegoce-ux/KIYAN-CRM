@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DollarSign, Flame, TrendingUp } from "lucide-react";
+import { DollarSign, Flame, TrendingUp, LineChart } from "lucide-react";
 import type { CrmStats } from "@/lib/analytics";
 import AiInsightCard from "./AiInsightCard";
 import EmbedFormCard from "./EmbedFormCard";
@@ -17,12 +17,18 @@ export default function AnalyticsPanel({
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<DollarSign size={18} />}
           label="إجمالي قيمة الصفقات (Pipeline Value)"
           value={`${currency.format(stats.totalPipelineValue)} €`}
           accent="text-emerald-400"
+        />
+        <StatCard
+          icon={<LineChart size={18} />}
+          label="الإيرادات المتوقعة (Forecasted Revenue)"
+          value={`${currency.format(stats.forecastedRevenue)} €`}
+          accent="text-amber-400"
         />
         <StatCard
           icon={<Flame size={18} />}
