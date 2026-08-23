@@ -4,8 +4,9 @@ import { PlusCircle, Download } from "lucide-react";
 import { getLeads, addLead } from "./actions/leads";
 import { getDeals, createDeal } from "./actions/deals";
 import { getAutopilotSetting } from "./actions/settings";
-import { computeCrmStats } from "@/lib/analytics";
+import { computeCrmStats, computeTeamDistribution } from "@/lib/analytics";
 import { getAppUrl } from "@/lib/appUrl";
+import { getOrgMembers } from "@/lib/team";
 import DashboardTabs from "./components/DashboardTabs";
 import DealsKanban from "./components/DealsKanban";
 import LeadsList from "./components/LeadsList";
@@ -19,7 +20,9 @@ export default async function Home() {
   const deals = orgId ? await getDeals() : [];
   const autopilotEnabled = orgId ? await getAutopilotSetting() : false;
   const appUrl = orgId ? await getAppUrl() : "";
+  const members = orgId ? await getOrgMembers(orgId) : [];
   const stats = computeCrmStats(leads, deals);
+  const teamDistribution = computeTeamDistribution(leads, deals, members);
 
   const leadsContent = (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -65,7 +68,9 @@ export default async function Home() {
         </form>
       </div>
 
-      {orgId && <LeadsList orgId={orgId} initialLeads={leads} />}
+      {orgId && (
+        <LeadsList orgId={orgId} initialLeads={leads} members={members} currentUserId={userId ?? null} />
+      )}
     </div>
   );
 
@@ -143,7 +148,7 @@ export default async function Home() {
   );
 
   const analyticsContent = orgId ? (
-    <AnalyticsPanel stats={stats} orgId={orgId} appUrl={appUrl} />
+    <AnalyticsPanel stats={stats} orgId={orgId} appUrl={appUrl} teamDistribution={teamDistribution} />
   ) : null;
 
   return (

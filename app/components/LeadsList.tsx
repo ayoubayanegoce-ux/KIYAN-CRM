@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { ArrowRightLeft, Download, Reply, Loader2, Building2, Users2, AlertTriangle } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { ArrowRightLeft, Download, Reply, Loader2, Building2, Users2, AlertTriangle, UserCog } from "lucide-react";
 import { useRealtimeLeads, type LeadRow } from "@/lib/hooks/useRealtimeLeads";
 import { convertLeadToDeal } from "@/app/actions/deals";
+import { assignLead } from "@/app/actions/leads";
 import { markLeadReplied } from "@/app/actions/outreach";
 import OutreachModal from "./OutreachModal";
 import NotesModal from "./NotesModal";
@@ -13,22 +14,54 @@ import ImportLeadsButton from "./ImportLeadsButton";
 
 const QUALIFIED_INTENTS = ["hot", "warm"];
 
+type AssigneeFilter = "all" | "mine" | "unassigned";
+
 export default function LeadsList({
   orgId,
   initialLeads,
+  members,
+  currentUserId,
 }: {
   orgId: string;
   initialLeads: LeadRow[];
+  members: { userId: string; name: string }[];
+  currentUserId: string | null;
 }) {
   const leads = useRealtimeLeads(orgId, initialLeads);
+  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>("all");
+
+  const filteredLeads = useMemo(() => {
+    if (assigneeFilter === "mine") return leads.filter((l) => l.assignee_id === currentUserId);
+    if (assigneeFilter === "unassigned") return leads.filter((l) => !l.assignee_id);
+    return leads;
+  }, [leads, assigneeFilter, currentUserId]);
 
   return (
     <div className="md:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
       <div className="flex flex-wrap justify-between items-center gap-2">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <span>📋</span> قائمة العملاء ({leads.length})
+          <span>📋</span> قائمة العملاء ({filteredLeads.length})
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-slate-800 rounded-lg p-0.5 text-xs">
+            {(
+              [
+                ["all", "الجميع"],
+                ["mine", "عملائي فقط"],
+                ["unassigned", "غير معيّن"],
+              ] as [AssigneeFilter, string][]
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setAssigneeFilter(value)}
+                className={`px-2.5 py-1.5 rounded-md font-medium transition cursor-pointer ${
+                  assigneeFilter === value ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <a
             href="/api/export/leads"
             className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-2"
@@ -39,11 +72,13 @@ export default function LeadsList({
         </div>
       </div>
 
-      {leads.length === 0 ? (
-        <p className="text-slate-500 text-sm py-8 text-center">لا يوجد عملاء مضافون لهذه المنظمة بعد.</p>
+      {filteredLeads.length === 0 ? (
+        <p className="text-slate-500 text-sm py-8 text-center">
+          {leads.length === 0 ? "لا يوجد عملاء مضافون لهذه المنظمة بعد." : "لا يوجد عملاء مطابقون لهذا الفلتر."}
+        </p>
       ) : (
         <div className="space-y-3">
-          {leads.map((lead) => {
+          {filteredLeads.map((lead) => {
             const isQualified = QUALIFIED_INTENTS.includes(lead.ai_intent ?? "");
             const isConverted = lead.status === "converted";
             const isContacted = lead.status === "contacted";
@@ -105,6 +140,12 @@ export default function LeadsList({
                     {lead.ai_intent ? lead.ai_intent.toUpperCase() : "COLD"}
                   </span>
 
+                  <AssigneeDropdown
+                    leadId={lead.id}
+                    currentAssigneeId={lead.assignee_id}
+                    members={members}
+                  />
+
                   <SequenceEngagement leadId={lead.id} status={lead.sequence_status} step={lead.sequence_step} />
 
                   <OutreachModal leadId={lead.id} leadName={lead.name} />
@@ -139,6 +180,50 @@ export default function LeadsList({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function AssigneeDropdown({
+  leadId,
+  currentAssigneeId,
+  members,
+}: {
+  leadId: string;
+  currentAssigneeId: string | null;
+  members: { userId: string; name: string }[];
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  function handleChange(value: string) {
+    const member = members.find((m) => m.userId === value);
+    startTransition(async () => {
+      try {
+        await assignLead(leadId, member?.userId ?? null, member?.name ?? null);
+      } catch (error) {
+        console.error(error);
+      }
+    });
+  }
+
+  return (
+    <div className="relative flex items-center gap-1">
+      <UserCog size={13} className="text-slate-500 shrink-0" />
+      <select
+        value={currentAssigneeId ?? ""}
+        onChange={(e) => handleChange(e.target.value)}
+        disabled={isPending}
+        title="تعيين المسؤول"
+        className="text-xs bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 focus:outline-blue-500 disabled:opacity-50 cursor-pointer max-w-[130px]"
+      >
+        <option value="">غير معيّن</option>
+        {members.map((member) => (
+          <option key={member.userId} value={member.userId}>
+            {member.name}
+          </option>
+        ))}
+      </select>
+      {isPending && <Loader2 size={12} className="animate-spin text-slate-500" />}
     </div>
   );
 }

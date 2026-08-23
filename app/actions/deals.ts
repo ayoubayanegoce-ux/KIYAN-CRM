@@ -22,7 +22,13 @@ export type DealRow = {
   win_probability: number | null;
   stage: DealStage;
   created_at: string;
-  leads?: { name: string; company: string | null; email: string } | null;
+  leads?: {
+    name: string;
+    company: string | null;
+    email: string;
+    assignee_id?: string | null;
+    assignee_name?: string | null;
+  } | null;
 };
 
 const DEFAULT_WIN_PROBABILITY = 50;
@@ -48,7 +54,7 @@ export async function getDeals() {
 
   const { data, error } = await supabase
     .from("deals")
-    .select("*, leads(name, email, company)")
+    .select("*, leads(name, email, company, assignee_id, assignee_name)")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false });
 

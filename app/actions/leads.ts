@@ -224,3 +224,42 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
   revalidatePath("/");
   return { imported: qualified.length, skipped };
 }
+
+/**
+ * assigneeId فارغ/null يعني "إلغاء التعيين" (عودة لحالة غير معيّن). assigneeName
+ * يُمرَّر من العميل من نفس قائمة الأعضاء المعروضة في القائمة المنسدلة، فلا حاجة
+ * لاستدعاء Clerk API عند كل تعيين.
+ */
+export async function assignLead(leadId: string, assigneeId: string | null, assigneeName: string | null) {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+
+  const { data: lead, error: leadError } = await supabase
+    .from("leads")
+    .select("name")
+    .eq("id", leadId)
+    .eq("org_id", orgId)
+    .single();
+
+  if (leadError || !lead) throw new Error("العميل غير موجود");
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ assignee_id: assigneeId, assignee_name: assigneeName })
+    .eq("id", leadId)
+    .eq("org_id", orgId);
+
+  if (error) throw new Error(error.message);
+
+  await logActivity({
+    orgId,
+    leadId,
+    type: "lead_assigned",
+    description: assigneeName
+      ? `👤 تم تعيين العميل "${lead.name}" إلى ${assigneeName}`
+      : `تم إلغاء تعيين العميل "${lead.name}"`,
+    metadata: { assignee_id: assigneeId, assignee_name: assigneeName },
+  });
+
+  revalidatePath("/");
+}

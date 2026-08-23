@@ -4,6 +4,21 @@ import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
 import type { AITone, AILanguage } from "@/lib/ai";
+import { getTwilioConfigStatus, sendTestWhatsAppAlert, type TwilioConfigStatus } from "@/lib/whatsapp";
+
+export type { TwilioConfigStatus };
+
+export async function checkTwilioStatus(): Promise<TwilioConfigStatus> {
+  const { orgId } = await auth();
+  if (!orgId) return { configured: false, missing: [] };
+  return getTwilioConfigStatus();
+}
+
+export async function sendTestWhatsApp(): Promise<{ success: boolean; message: string }> {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  return sendTestWhatsAppAlert();
+}
 
 export type { AITone, AILanguage };
 

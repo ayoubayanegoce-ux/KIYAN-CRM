@@ -1,8 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Settings, X, Loader2, Save, Check, Link2 } from "lucide-react";
-import { getAISettings, setAISettings, type AITone, type AILanguage } from "@/app/actions/settings";
+import { Settings, X, Loader2, Save, Check, Link2, MessageCircle, Send, CheckCircle2, XCircle } from "lucide-react";
+import {
+  getAISettings,
+  setAISettings,
+  checkTwilioStatus,
+  sendTestWhatsApp,
+  type AITone,
+  type AILanguage,
+  type TwilioConfigStatus,
+} from "@/app/actions/settings";
 
 const TONE_OPTIONS: { value: AITone; label: string }[] = [
   { value: "professionnel", label: "Professionnel" },
@@ -29,15 +37,20 @@ export default function SettingsModal() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [twilioStatus, setTwilioStatus] = useState<TwilioConfigStatus | null>(null);
+  const [isTesting, startTestTransition] = useTransition();
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   function load() {
     setError(null);
     startLoadTransition(async () => {
       try {
-        const settings = await getAISettings();
+        const [settings, twilio] = await Promise.all([getAISettings(), checkTwilioStatus()]);
         setTone(settings.tone);
         setLanguage(settings.language);
         setValueProposition(settings.valueProposition);
         setBookingUrl(settings.bookingUrl);
+        setTwilioStatus(twilio);
         setLoaded(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "فشل تحميل الإعدادات");
@@ -64,6 +77,18 @@ export default function SettingsModal() {
     });
   }
 
+  function handleTestWhatsApp() {
+    setTestResult(null);
+    startTestTransition(async () => {
+      try {
+        const result = await sendTestWhatsApp();
+        setTestResult(result);
+      } catch (e) {
+        setTestResult({ success: false, message: e instanceof Error ? e.message : "فشل الاختبار" });
+      }
+    });
+  }
+
   return (
     <>
       <button
@@ -80,7 +105,7 @@ export default function SettingsModal() {
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 space-y-4"
+            className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-6 space-y-4 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center">
@@ -184,6 +209,47 @@ export default function SettingsModal() {
                 </button>
 
                 {error && <p className="text-red-400 text-xs text-center">{error}</p>}
+
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                    <MessageCircle size={13} /> إشعارات واتساب (Twilio)
+                  </p>
+
+                  {twilioStatus && (
+                    <div
+                      className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg border ${
+                        twilioStatus.configured
+                          ? "bg-emerald-950 text-emerald-400 border-emerald-800"
+                          : "bg-amber-950 text-amber-400 border-amber-800"
+                      }`}
+                    >
+                      {twilioStatus.configured ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                      {twilioStatus.configured
+                        ? "متغيرات Twilio مُعرَّفة بالكامل"
+                        : `ناقص: ${twilioStatus.missing.join(", ")}`}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-500">
+                    تُضبط مفاتيح Twilio عبر متغيرات البيئة (.env.local محلياً، أو إعدادات Vercel في
+                    الإنتاج) — وليس من هذه النافذة، للحفاظ على أمان الأسرار.
+                  </p>
+
+                  <button
+                    onClick={handleTestWhatsApp}
+                    disabled={isTesting || !twilioStatus?.configured}
+                    className="w-full py-2 bg-slate-800 hover:bg-emerald-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isTesting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                    Envoyer un test WhatsApp
+                  </button>
+
+                  {testResult && (
+                    <p className={`text-[11px] text-center ${testResult.success ? "text-emerald-400" : "text-red-400"}`}>
+                      {testResult.message}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

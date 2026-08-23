@@ -24,12 +24,14 @@ export async function GET() {
     "name",
     "email",
     "company",
+    "ai_score",
+    "priority",
     "industry",
     "company_model",
     "pain_points",
+    "sequence_status",
+    "assignee_name",
     "status",
-    "ai_score",
-    "ai_intent",
     "created_at",
   ];
   const csv = rowsToCsv(
@@ -39,12 +41,14 @@ export async function GET() {
       name: lead.name,
       email: lead.email,
       company: lead.company ?? "",
+      ai_score: lead.ai_score ?? "",
+      priority: lead.ai_intent ? lead.ai_intent.toUpperCase() : "",
       industry: lead.enriched_data?.industry ?? "",
       company_model: lead.enriched_data?.companyModel ?? "",
       pain_points: lead.enriched_data?.painPoints ?? "",
+      sequence_status: lead.sequence_status ?? "",
+      assignee_name: lead.assignee_name ?? "",
       status: lead.status ?? "",
-      ai_score: lead.ai_score ?? "",
-      ai_intent: lead.ai_intent ?? "",
       created_at: lead.created_at ?? "",
     }))
   );

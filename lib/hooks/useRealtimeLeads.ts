@@ -17,6 +17,8 @@ export type LeadRow = {
   sequence_status: string | null;
   sequence_step: number | null;
   enriched_data: CompanyProfile | null;
+  assignee_id: string | null;
+  assignee_name: string | null;
   created_at: string;
 };
 
