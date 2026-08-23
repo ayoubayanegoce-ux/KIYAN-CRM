@@ -5,10 +5,11 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || "",
 });
 
-export async function qualifyLead(name: string, email: string, company: string) {
+export async function qualifyLead(name: string, email: string, company: string, context?: string) {
   try {
     const prompt = `
 أنت وكيل ذكاء اصطناعي متخصص في تقييم وفرز العملاء المحتملين لشركات B2B.
+${context ? `سياق شركتنا (استخدمه لتقييم مدى ملاءمة هذا العميل لملفنا التجاري):\n${context}\n` : ""}
 قم بتحليل بيانات العميل التالية:
 - الاسم: ${name}
 - البريد الإلكتروني: ${email}
@@ -52,6 +53,8 @@ export type OutreachSettings = {
   tone?: AITone;
   language?: AILanguage;
   valueProposition?: string;
+  /** سياق الشركة المقروء من CRM_CONTEXT.md، يُحقن كسياق أساسي إضافي */
+  companyContext?: string;
 };
 
 const TONE_DESCRIPTIONS: Record<AITone, string> = {
@@ -79,11 +82,12 @@ export async function generateOutreachEmail(
   const tone = settings?.tone ?? DEFAULT_TONE;
   const language = settings?.language ?? DEFAULT_LANGUAGE;
   const valueProposition = settings?.valueProposition?.trim();
+  const companyContext = settings?.companyContext?.trim();
 
   try {
     const prompt = `
 أنت خبير تسويق ومبيعات B2B متخصص في كتابة رسائل التواصل البارد (Cold Outreach) الاحترافية.
-
+${companyContext ? `\nسياق عملنا (Company Context):\n${companyContext}\n` : ""}
 اكتب بريداً إلكترونياً تسويقياً مخصصاً للعميل المحتمل التالي:
 - الاسم: ${name}
 - الشركة: ${company || "غير محدد"}

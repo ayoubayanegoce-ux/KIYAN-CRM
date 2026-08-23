@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { generateOutreachEmail, type AITone, type AILanguage } from "@/lib/ai";
+import { getCrmContext } from "@/lib/crmContext";
 import { sendLeadEmail } from "@/lib/resend";
 
 const AUTO_PILOT_SCORE_THRESHOLD = 80;
@@ -35,10 +36,12 @@ export async function maybeRunAutoPilot(orgId: string, lead: AutoPilotLead): Pro
 
     if (!settings?.autopilot_enabled) return;
 
+    const companyContext = await getCrmContext();
     const { subject, body } = await generateOutreachEmail(lead.name, lead.company, lead.ai_intent, {
       tone: (settings.ai_tone as AITone) ?? undefined,
       language: (settings.ai_language as AILanguage) ?? undefined,
       valueProposition: settings.ai_value_proposition ?? undefined,
+      companyContext,
     });
     if (!subject.trim() || !body.trim()) {
       console.error("Auto-Pilot: email generation returned empty content, skipping send");

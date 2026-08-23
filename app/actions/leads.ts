@@ -2,7 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
-import { qualifyLead } from "@/lib/ai";
+import { qualifyLeadWithContext } from "@/app/actions/qualification";
 import { parseCsv } from "@/lib/csv";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
@@ -41,7 +41,7 @@ export async function addLead(formData: FormData) {
   const company = formData.get("company") as string;
 
   // تشغيل وكيل الذكاء الاصطناعي لتقييم العميل فورياً
-  const { ai_score, ai_intent, reasoning } = await qualifyLead(name, email, company);
+  const { ai_score, ai_intent, reasoning } = await qualifyLeadWithContext(name, email, company);
 
   const { data, error } = await supabase
     .from("leads")
@@ -116,7 +116,11 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
 
   const qualified = await Promise.all(
     valid.map(async (lead) => {
-      const { ai_score, ai_intent, reasoning } = await qualifyLead(lead.name, lead.email, lead.company);
+      const { ai_score, ai_intent, reasoning } = await qualifyLeadWithContext(
+        lead.name,
+        lead.email,
+        lead.company
+      );
       return { ...lead, ai_score, ai_intent, reasoning };
     })
   );

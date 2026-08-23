@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { generateOutreachEmail } from "@/lib/ai";
 import { getAISettings } from "@/app/actions/settings";
+import { getCrmContext } from "@/lib/crmContext";
 
 export async function generateOutreachForLead(leadId: string) {
   const { orgId } = await auth();
@@ -18,11 +19,12 @@ export async function generateOutreachForLead(leadId: string) {
 
   if (error || !lead) throw new Error("العميل غير موجود");
 
-  const settings = await getAISettings();
+  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext()]);
 
   return generateOutreachEmail(lead.name, lead.company, lead.ai_intent, {
     tone: settings.tone,
     language: settings.language,
     valueProposition: settings.valueProposition,
+    companyContext,
   });
 }

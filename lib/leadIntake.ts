@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { qualifyLead } from "@/lib/ai";
+import { getCrmContext } from "@/lib/crmContext";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
 import { notifyHotLead } from "@/lib/whatsapp";
@@ -35,7 +36,13 @@ export async function createQualifiedLead(
   input: LeadIntakeInput,
   source: LeadIntakeSource
 ): Promise<LeadIntakeResult> {
-  const { ai_score, ai_intent, reasoning } = await qualifyLead(input.name, input.email, input.company);
+  const context = await getCrmContext();
+  const { ai_score, ai_intent, reasoning } = await qualifyLead(
+    input.name,
+    input.email,
+    input.company,
+    context
+  );
 
   const { data, error } = await supabase
     .from("leads")
