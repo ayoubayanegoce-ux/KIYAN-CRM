@@ -15,7 +15,9 @@ export type ActivityType =
   | "lead_assigned"
   | "payment_link_created"
   | "payment_received"
-  | "payment_failed";
+  | "payment_failed"
+  | "proposal_generated"
+  | "proposal_accepted";
 
 /**
  * Internal-only logger — not a server action. Callers (other server actions,

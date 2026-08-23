@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowRightLeft, Download, Reply, Loader2, Building2, Users2, AlertTriangle, UserCog } from "lucide-react";
+import { ArrowRightLeft, Download, Reply, Loader2, Building2, Users2, AlertTriangle, UserCog, Search } from "lucide-react";
+import Link from "next/link";
 import { useRealtimeLeads, type LeadRow } from "@/lib/hooks/useRealtimeLeads";
 import { convertLeadToDeal } from "@/app/actions/deals";
 import { assignLead } from "@/app/actions/leads";
@@ -10,6 +11,7 @@ import OutreachModal from "./OutreachModal";
 import NotesModal from "./NotesModal";
 import ActivityModal from "./ActivityModal";
 import SequenceModal from "./SequenceModal";
+import BattlecardModal from "./BattlecardModal";
 import ImportLeadsButton from "./ImportLeadsButton";
 
 const QUALIFIED_INTENTS = ["hot", "warm"];
@@ -62,6 +64,12 @@ export default function LeadsList({
               </button>
             ))}
           </div>
+          <Link
+            href="/leads/finder"
+            className="px-3 py-2 bg-slate-800 hover:bg-blue-700 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-2"
+          >
+            <Search size={14} /> البحث عن عملاء جدد
+          </Link>
           <a
             href="/api/export/leads"
             className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-2"
@@ -150,6 +158,7 @@ export default function LeadsList({
 
                   <OutreachModal leadId={lead.id} leadName={lead.name} />
                   <SequenceModal leadId={lead.id} leadName={lead.name} />
+                  <BattlecardModal leadId={lead.id} leadName={lead.name} />
                   <NotesModal leadId={lead.id} leadName={lead.name} />
                   <ActivityModal leadId={lead.id} leadName={lead.name} enrichedData={lead.enriched_data} />
 

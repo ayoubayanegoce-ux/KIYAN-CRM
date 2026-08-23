@@ -1,8 +1,8 @@
 "use client";
 
 import { useOptimistic, useState, useTransition } from "react";
-import { GripVertical, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { updateDealStage, createDealCheckoutSession, type DealStage, type DealRow } from "@/app/actions/deals";
+import { GripVertical, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Loader2, FileText, Copy, Check } from "lucide-react";
+import { updateDealStage, createDealCheckoutSession, generateProposal, type DealStage, type DealRow } from "@/app/actions/deals";
 import { useRealtimeDeals } from "@/lib/hooks/useRealtimeDeals";
 
 const STAGES: { key: DealStage; label: string; accent: string }[] = [
@@ -16,7 +16,7 @@ const STAGES: { key: DealStage; label: string; accent: string }[] = [
 
 const currency = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
-export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId: string }) {
+export default function DealsKanban({ deals, orgId, appUrl }: { deals: DealRow[]; orgId: string; appUrl: string }) {
   const liveDeals = useRealtimeDeals(orgId, deals);
   const [optimisticDeals, setOptimisticStage] = useOptimistic(
     liveDeals,
@@ -117,12 +117,13 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
                           🎯 {deal.win_probability ?? 50}%
                         </span>
                       </div>
-                      <div className="mt-2">
+                      <div className="mt-2 flex flex-wrap gap-1.5">
                         <PaymentAction
                           dealId={deal.id}
                           paymentStatus={deal.payment_status}
                           checkoutUrl={deal.stripe_checkout_url}
                         />
+                        <ProposalAction dealId={deal.id} hasProposal={!!deal.proposal} appUrl={appUrl} />
                       </div>
                     </div>
                   </div>
@@ -202,6 +203,55 @@ function PaymentAction({
             <CreditCard size={11} />
           )}
           {paymentStatus === "failed" ? "إعادة محاولة الدفع" : "Créer un lien de paiement"}
+        </button>
+      )}
+      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function ProposalAction({ dealId, hasProposal, appUrl }: { dealId: string; hasProposal: boolean; appUrl: string }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [ready, setReady] = useState(hasProposal);
+
+  const proposalUrl = `${appUrl}/proposals/${dealId}`;
+
+  function handleGenerate() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await generateProposal(dealId);
+        setReady(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "فشل توليد العرض");
+      }
+    });
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(proposalUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} title={error ?? undefined}>
+      {ready ? (
+        <button
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-sky-700 text-slate-300 hover:text-white transition cursor-pointer font-medium"
+        >
+          {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "تم النسخ" : "نسخ رابط العرض"}
+        </button>
+      ) : (
+        <button
+          onClick={handleGenerate}
+          disabled={isPending}
+          className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-sky-700 text-slate-300 hover:text-white transition cursor-pointer font-medium disabled:opacity-50"
+        >
+          {isPending ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />} توليد عرض سعر
         </button>
       )}
       {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}

@@ -71,6 +71,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true, matched: false });
   }
 
+  // نجلب نص الرسالة الكامل (وليس فقط الميتاداتا في حمولة الويب هوك) حتى
+  // يتوفر محتوى فعلي لتحليله لاحقاً عبر "اقتراح رد ذكي" في نافذة الملاحظات.
+  let inboundText = "";
+  try {
+    const { data: emailContent } = await resend.emails.receiving.get(event.data.email_id);
+    inboundText = (emailContent?.text || "").trim();
+  } catch (err) {
+    console.error("Failed to fetch inbound email content:", err);
+  }
+  if (!inboundText) inboundText = event.data.subject || "(بدون محتوى نصي)";
+
+  await supabase.from("notes").insert([
+    {
+      org_id: orgId,
+      lead_id: lead.id,
+      type: "inbound_reply",
+      content: inboundText.slice(0, 5000),
+    },
+  ]);
+
   await supabase
     .from("leads")
     .update({ sequence_status: "replied", status: "contacted" })

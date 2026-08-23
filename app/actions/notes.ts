@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 
-export type NoteType = "note" | "call";
+export type NoteType = "note" | "call" | "inbound_reply";
 
 export type Note = {
   id: string;

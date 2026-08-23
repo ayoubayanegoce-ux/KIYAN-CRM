@@ -15,6 +15,7 @@ import {
   CreditCard,
   CheckCircle2,
   XCircle,
+  FileText,
 } from "lucide-react";
 import type { Activity } from "@/app/actions/activities";
 
@@ -34,6 +35,8 @@ const TYPE_META: Record<string, { icon: ComponentType<{ size?: number }>; color:
   payment_link_created: { icon: CreditCard, color: "text-violet-400" },
   payment_received: { icon: CheckCircle2, color: "text-emerald-400" },
   payment_failed: { icon: XCircle, color: "text-red-400" },
+  proposal_generated: { icon: FileText, color: "text-sky-400" },
+  proposal_accepted: { icon: CheckCircle2, color: "text-emerald-400" },
 };
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" });

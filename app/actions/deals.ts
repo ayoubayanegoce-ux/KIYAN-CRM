@@ -5,7 +5,21 @@ import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
 import { getStripeClient } from "@/lib/stripe";
 import { getAppUrl } from "@/lib/appUrl";
+import { generateProposalItems, type ProposalItem } from "@/lib/ai";
+import { assertAiQuota, incrementAiUsage } from "@/lib/quota";
 import { revalidatePath } from "next/cache";
+
+export type ProposalStatus = "draft" | "sent" | "accepted";
+
+export type DealProposal = {
+  items: ProposalItem[];
+  terms: string;
+  validityDays: number;
+  status: ProposalStatus;
+  generatedAt: string;
+  acceptedByName?: string;
+  acceptedAt?: string;
+};
 
 export type DealStage =
   | "discovery"
@@ -28,6 +42,7 @@ export type DealRow = {
   payment_status: PaymentStatus;
   stripe_checkout_url: string | null;
   stripe_checkout_session_id: string | null;
+  proposal: DealProposal | null;
   created_at: string;
   leads?: {
     name: string;
@@ -266,4 +281,55 @@ export async function createDealCheckoutSession(dealId: string): Promise<{ url: 
 
   revalidatePath("/");
   return { url: session.url };
+}
+
+/**
+ * يولّد عرض سعر (Devis) لصفقة موجودة — بنود مقترحة تُجمِّع قيمة الصفقة تقريباً
+ * + شروط تجارية، ويحفظه في عمود deals.proposal بحالة "draft". لا يُعتبَر
+ * العرض "مُرسَلاً" حتى يُشارَك رابطه العام (/proposals/[dealId]) فعلياً —
+ * توليده لا يفعّل شيئاً تلقائياً غير حفظ المسودة.
+ */
+export async function generateProposal(dealId: string): Promise<DealProposal> {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  await assertAiQuota(orgId);
+
+  const { data: deal, error } = await supabase
+    .from("deals")
+    .select("id, title, deal_value, leads(enriched_data)")
+    .eq("id", dealId)
+    .eq("org_id", orgId)
+    .single();
+
+  if (error || !deal) throw new Error("الصفقة غير موجودة");
+
+  const lead = Array.isArray(deal.leads) ? deal.leads[0] : deal.leads;
+  const content = await generateProposalItems(deal.title, Number(deal.deal_value) || 0, undefined, lead?.enriched_data);
+  await incrementAiUsage(orgId);
+
+  const proposal: DealProposal = {
+    items: content.items,
+    terms: content.terms,
+    validityDays: content.validityDays,
+    status: "draft",
+    generatedAt: new Date().toISOString(),
+  };
+
+  const { error: updateError } = await supabase
+    .from("deals")
+    .update({ proposal })
+    .eq("id", dealId)
+    .eq("org_id", orgId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  await logActivity({
+    orgId,
+    dealId,
+    type: "proposal_generated",
+    description: `📄 تم توليد عرض سعر لصفقة "${deal.title}"`,
+  });
+
+  revalidatePath("/");
+  return proposal;
 }

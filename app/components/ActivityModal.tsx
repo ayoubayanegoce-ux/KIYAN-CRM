@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   TrendingUp,
   MessageCircle,
+  Mail,
+  Link2,
+  Phone,
 } from "lucide-react";
 import {
   getActivities,
@@ -23,7 +26,13 @@ import {
   type Activity,
   type Task,
 } from "@/app/actions/activities";
-import type { CompanyProfile } from "@/lib/ai";
+import type { CompanyProfile, SequenceChannel } from "@/lib/ai";
+
+const CHANNEL_META: Record<SequenceChannel, { icon: typeof Mail; color: string }> = {
+  email: { icon: Mail, color: "text-sky-400" },
+  linkedin: { icon: Link2, color: "text-blue-400" },
+  whatsapp: { icon: Phone, color: "text-emerald-400" },
+};
 import ActivityTimeline from "./ActivityTimeline";
 
 export default function ActivityModal({
@@ -190,27 +199,34 @@ export default function ActivityModal({
 
               {pendingTasks.length > 0 && (
                 <div className="space-y-1.5 pt-1">
-                  {pendingTasks.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between gap-2 p-2 bg-slate-950 border border-slate-800/80 rounded-lg"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs text-slate-300 truncate">{t.title}</p>
-                        {t.description && (
-                          <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{t.description}</p>
-                        )}
-                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">استحقاق: {t.due_date}</p>
-                      </div>
-                      <button
-                        onClick={() => handleComplete(t.id)}
-                        title="وضع علامة كمنجزة"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-emerald-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
+                  {pendingTasks.map((t) => {
+                    const channelMeta = CHANNEL_META[t.channel] ?? CHANNEL_META.email;
+                    const ChannelIcon = channelMeta.icon;
+                    return (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-2 p-2 bg-slate-950 border border-slate-800/80 rounded-lg"
                       >
-                        <Check size={12} />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="min-w-0 flex items-start gap-1.5">
+                          <ChannelIcon size={12} className={`shrink-0 mt-0.5 ${channelMeta.color}`} />
+                          <div className="min-w-0">
+                            <p className="text-xs text-slate-300 truncate">{t.title}</p>
+                            {t.description && (
+                              <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{t.description}</p>
+                            )}
+                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">استحقاق: {t.due_date}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleComplete(t.id)}
+                          title="وضع علامة كمنجزة"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-emerald-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
+                        >
+                          <Check size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

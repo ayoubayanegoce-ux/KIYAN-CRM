@@ -5,9 +5,14 @@ import { supabase } from "@/lib/supabase";
 import {
   generateOutreachEmail,
   generateSequenceSteps,
+  generateSalesBattlecard,
+  generateSuggestedReplies,
   SEQUENCE_STEP_LABELS_AR,
+  SEQUENCE_CHANNEL_LABELS_AR,
   SEQUENCE_TASK_PREFIX,
   type SequenceStep,
+  type SalesBattlecard,
+  type SuggestedReply,
 } from "@/lib/ai";
 import { getAISettings } from "@/app/actions/settings";
 import { getCrmContext } from "@/lib/crmContext";
@@ -99,10 +104,12 @@ export async function approveSequence(leadId: string, steps: SequenceStep[]) {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + step.delayDays);
     const dueDateStr = dueDate.toISOString().slice(0, 10);
-    const title = `${SEQUENCE_TASK_PREFIX}${SEQUENCE_STEP_LABELS_AR[step.label]}: ${step.subject}`.slice(0, 200);
+    const title = `${SEQUENCE_TASK_PREFIX}[${SEQUENCE_CHANNEL_LABELS_AR[step.channel]}] ${
+      SEQUENCE_STEP_LABELS_AR[step.label]
+    }: ${step.subject}`.slice(0, 200);
     const description = step.body + bookingCtaText(bookingUrl);
 
-    await addFollowUpTask(leadId, title, dueDateStr, description);
+    await addFollowUpTask(leadId, title, dueDateStr, description, step.channel);
   }
 
   revalidatePath("/");
@@ -149,4 +156,50 @@ export async function markLeadReplied(leadId: string) {
   });
 
   revalidatePath("/");
+}
+
+export async function generateBattlecardForLead(leadId: string): Promise<SalesBattlecard> {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  await assertAiQuota(orgId);
+
+  const lead = await getLeadForOutreach(leadId, orgId);
+  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext(orgId)]);
+
+  const card = await generateSalesBattlecard(lead.name, lead.company, lead.ai_intent, {
+    tone: settings.tone,
+    language: settings.language,
+    valueProposition: settings.valueProposition,
+    companyContext,
+    enrichedData: lead.enriched_data,
+  });
+  await incrementAiUsage(orgId);
+  return card;
+}
+
+/**
+ * يُشغَّل من نافذة الملاحظات عندما يفتح المندوب رد وارد فعلي (ملاحظة من نوع
+ * inbound_reply). لا نجلب الرد الوارد هنا — يُمرَّر نصه من الواجهة لأنه
+ * محفوظ مسبقاً كمحتوى الملاحظة نفسها.
+ */
+export async function generateSuggestedRepliesForLead(
+  leadId: string,
+  inboundMessage: string
+): Promise<SuggestedReply[]> {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+  await assertAiQuota(orgId);
+
+  const lead = await getLeadForOutreach(leadId, orgId);
+  const [settings, companyContext] = await Promise.all([getAISettings(), getCrmContext(orgId)]);
+
+  const replies = await generateSuggestedReplies(inboundMessage, lead.name, {
+    tone: settings.tone,
+    language: settings.language,
+    valueProposition: settings.valueProposition,
+    companyContext,
+    bookingUrl: settings.bookingUrl,
+  });
+  await incrementAiUsage(orgId);
+  return replies;
 }

@@ -4,7 +4,7 @@ import { PlusCircle, Download } from "lucide-react";
 import { getLeads, addLead } from "./actions/leads";
 import { getDeals, createDeal } from "./actions/deals";
 import { getAutopilotSetting, getOnboardingStatus, getBranding } from "./actions/settings";
-import { computeCrmStats, computeTeamDistribution } from "@/lib/analytics";
+import { computeCrmStats, computeFunnel, computeLeaderboard } from "@/lib/analytics";
 import { getAppUrl } from "@/lib/appUrl";
 import { getOrgMembers } from "@/lib/team";
 import DashboardTabs from "./components/DashboardTabs";
@@ -31,7 +31,8 @@ export default async function Home() {
   const onboardingCompleted = orgId ? await getOnboardingStatus() : true;
   const branding = orgId ? await getBranding() : { orgDisplayName: "", logoUrl: "", brandColor: "" };
   const stats = computeCrmStats(leads, deals);
-  const teamDistribution = computeTeamDistribution(leads, deals, members);
+  const funnel = computeFunnel(leads, deals);
+  const leaderboard = computeLeaderboard(leads, deals, members);
 
   const leadsContent = (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -152,12 +153,12 @@ export default async function Home() {
         </form>
       </div>
 
-      {orgId && <DealsKanban deals={deals} orgId={orgId} />}
+      {orgId && <DealsKanban deals={deals} orgId={orgId} appUrl={appUrl} />}
     </div>
   );
 
   const analyticsContent = orgId ? (
-    <AnalyticsPanel stats={stats} orgId={orgId} appUrl={appUrl} teamDistribution={teamDistribution} />
+    <AnalyticsPanel stats={stats} orgId={orgId} appUrl={appUrl} funnel={funnel} leaderboard={leaderboard} />
   ) : null;
 
   return (

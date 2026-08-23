@@ -3,7 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { logActivity, type ActivityType } from "@/lib/activity";
-import { SEQUENCE_TASK_PREFIX } from "@/lib/ai";
+import { SEQUENCE_TASK_PREFIX, type SequenceChannel } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 
 export type Activity = {
@@ -28,6 +28,7 @@ export type Task = {
   description: string | null;
   due_date: string;
   status: TaskStatus;
+  channel: SequenceChannel;
   created_at: string;
 };
 
@@ -71,7 +72,8 @@ export async function addFollowUpTask(
   leadId: string,
   title: string,
   dueDate: string,
-  description?: string
+  description?: string,
+  channel: SequenceChannel = "email"
 ) {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
@@ -97,6 +99,7 @@ export async function addFollowUpTask(
       description: description?.trim() || null,
       due_date: dueDate,
       status: "pending",
+      channel,
     },
   ]);
 

@@ -153,3 +153,106 @@ export function computeTeamDistribution(
 
   return result;
 }
+
+export type FunnelStage = {
+  key: string;
+  label: string;
+  count: number;
+  /** null للمرحلة الأولى فقط (لا توجد مرحلة سابقة تُقاس نسبة التسرّب منها). */
+  dropOffPct: number | null;
+};
+
+const MEETING_OR_BEYOND_STAGES = ["meeting_scheduled", "proposal", "negotiation", "won"];
+const PROPOSAL_OR_BEYOND_STAGES = ["proposal", "negotiation", "won"];
+
+/**
+ * مسار تحويل مركّب من مصدرين: "Leads" و"Contacted" من جدول العملاء مباشرة
+ * (حالة العميل)، والباقي من مراحل الصفقة الفعلية — لأن "حجز موعد" و"عرض سعر"
+ * و"إغلاق مربوح" مفاهيم صفقة، لا عميل. هذا يعني أن الأرقام تقريبية وليست
+ * تتبّعاً حرفياً لكل عميل عبر مراحل موحّدة، لكنها تعكس واقع البيانات الحالية
+ * دون الحاجة لعمود تتبّع إضافي جديد.
+ */
+export function computeFunnel(leads: LeadLike[], deals: DealLike[]): FunnelStage[] {
+  const stagesRaw = [
+    { key: "leads", label: "Leads", count: leads.length },
+    { key: "contacted", label: "Contacted", count: leads.filter((l) => l.status && l.status !== "new").length },
+    {
+      key: "meeting",
+      label: "Meeting Scheduled",
+      count: deals.filter((d) => MEETING_OR_BEYOND_STAGES.includes(d.stage || "")).length,
+    },
+    {
+      key: "proposal",
+      label: "Proposal",
+      count: deals.filter((d) => PROPOSAL_OR_BEYOND_STAGES.includes(d.stage || "")).length,
+    },
+    { key: "won", label: "Closed Won", count: deals.filter((d) => d.stage === "won").length },
+  ];
+
+  return stagesRaw.map((stage, idx) => {
+    if (idx === 0) return { ...stage, dropOffPct: null };
+    const prevCount = stagesRaw[idx - 1].count;
+    const dropOffPct = prevCount > 0 ? ((prevCount - stage.count) / prevCount) * 100 : 0;
+    return { ...stage, dropOffPct };
+  });
+}
+
+export type LeaderboardRow = {
+  userId: string | null;
+  name: string;
+  contactedCount: number;
+  meetingsBookedCount: number;
+  closedWonValue: number;
+};
+
+/** صدارة المبيعات: عملاء تم التواصل معهم، مواعيد محجوزة، وقيمة الصفقات المغلقة لكل عضو — مُرتَّبة تنازلياً حسب القيمة المغلقة. */
+export function computeLeaderboard(
+  leads: LeadLike[],
+  deals: DealLike[],
+  members: { userId: string; name: string }[]
+): LeaderboardRow[] {
+  const rows = new Map<string, LeaderboardRow>();
+
+  for (const member of members) {
+    rows.set(member.userId, { userId: member.userId, name: member.name, contactedCount: 0, meetingsBookedCount: 0, closedWonValue: 0 });
+  }
+
+  for (const lead of leads) {
+    if (!lead.assignee_id || !lead.status || lead.status === "new") continue;
+    const row = rows.get(lead.assignee_id);
+    if (row) {
+      row.contactedCount += 1;
+    } else {
+      rows.set(lead.assignee_id, {
+        userId: lead.assignee_id,
+        name: lead.assignee_name || "عضو سابق",
+        contactedCount: 1,
+        meetingsBookedCount: 0,
+        closedWonValue: 0,
+      });
+    }
+  }
+
+  for (const deal of deals) {
+    const assigneeId = deal.leads?.assignee_id;
+    if (!assigneeId) continue;
+    const isMeetingOrBeyond = MEETING_OR_BEYOND_STAGES.includes(deal.stage || "");
+    const wonValue = deal.stage === "won" ? Number(deal.deal_value) || 0 : 0;
+
+    const row = rows.get(assigneeId);
+    if (row) {
+      if (isMeetingOrBeyond) row.meetingsBookedCount += 1;
+      row.closedWonValue += wonValue;
+    } else {
+      rows.set(assigneeId, {
+        userId: assigneeId,
+        name: deal.leads?.assignee_name || "عضو سابق",
+        contactedCount: 0,
+        meetingsBookedCount: isMeetingOrBeyond ? 1 : 0,
+        closedWonValue: wonValue,
+      });
+    }
+  }
+
+  return Array.from(rows.values()).sort((a, b) => b.closedWonValue - a.closedWonValue);
+}

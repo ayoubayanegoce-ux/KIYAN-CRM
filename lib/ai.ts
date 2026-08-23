@@ -157,10 +157,12 @@ ${valueProposition ? `\nنبذة عن شركتنا (ادمج قيمتنا الم
 }
 
 export type SequenceStepLabel = "initial_pitch" | "value_followup" | "breakup";
+export type SequenceChannel = "email" | "linkedin" | "whatsapp";
 
 export type SequenceStep = {
   step: 1 | 2 | 3;
   label: SequenceStepLabel;
+  channel: SequenceChannel;
   delayDays: number;
   subject: string;
   body: string;
@@ -172,27 +174,41 @@ export const SEQUENCE_STEP_LABELS_AR: Record<SequenceStepLabel, string> = {
   breakup: "رسالة الختام",
 };
 
+export const SEQUENCE_CHANNEL_LABELS_AR: Record<SequenceChannel, string> = {
+  email: "بريد إلكتروني",
+  linkedin: "LinkedIn",
+  whatsapp: "WhatsApp",
+};
+
 /** بادئة عنوان مهام التسلسل المُجدوَلة تلقائياً — تُستخدم لتمييزها عن مهام المتابعة اليدوية العادية. */
 export const SEQUENCE_TASK_PREFIX = "📧 ";
 
-const SEQUENCE_STEP_META: { label: SequenceStepLabel; delayDays: number; instructionsAr: string }[] = [
+const SEQUENCE_STEP_META: {
+  label: SequenceStepLabel;
+  channel: SequenceChannel;
+  delayDays: number;
+  instructionsAr: string;
+}[] = [
   {
     label: "initial_pitch",
+    channel: "email",
     delayDays: 0,
     instructionsAr:
-      "رسالة الطرح الأولي (Initial Pitch) — تعريف مختصر بنا وبقيمتنا المقترحة، ودعوة واضحة لمكالمة قصيرة.",
+      "رسالة بريد إلكتروني للطرح الأولي (Initial Pitch) — تعريف مختصر بنا وبقيمتنا المقترحة، ودعوة واضحة لمكالمة قصيرة. subject = عنوان البريد، body = نص البريد كاملاً.",
   },
   {
     label: "value_followup",
+    channel: "linkedin",
     delayDays: 3,
     instructionsAr:
-      "رسالة متابعة قيمة مضافة (Value Follow-up)، تُرسَل بعد 3 أيام من عدم الرد — أضف زاوية جديدة أو معلومة/حالة دراسة سريعة (quick case study) ذات صلة، بدون تكرار الرسالة الأولى.",
+      "رسالة تواصل عبر LinkedIn (مهمة تذكير للمندوب، تُرسَل بعد 3 أيام من عدم الرد على البريد) — قصيرة جداً (لا تتجاوز 300 حرف)، شخصية، تضيف زاوية أو قيمة جديدة دون تكرار البريد الأول. subject = عنوان مختصر للمهمة (مثال: 'تواصل LinkedIn')، body = نص رسالة LinkedIn المقترحة فعلياً لإرسالها.",
   },
   {
     label: "breakup",
+    channel: "whatsapp",
     delayDays: 7,
     instructionsAr:
-      "رسالة ختام سريعة (Break-up / Quick Question)، تُرسَل بعد 7 أيام من عدم الرد — قصيرة جداً، سؤال مباشر واحد، تفتح الباب للرد دون ضغط.",
+      "رسالة WhatsApp موجزة جداً (مهمة تذكير للمندوب، تُرسَل بعد 7 أيام من عدم الرد) — سؤال مباشر واحد وقصير جداً (لا تتجاوز 200 حرف)، تفتح الباب للرد دون ضغط. subject = عنوان مختصر للمهمة (مثال: 'متابعة WhatsApp')، body = نص رسالة WhatsApp المقترحة فعلياً.",
   },
 ];
 
@@ -216,6 +232,7 @@ export async function generateSequenceSteps(
     SEQUENCE_STEP_META.map((meta, idx) => ({
       step: (idx + 1) as 1 | 2 | 3,
       label: meta.label,
+      channel: meta.channel,
       delayDays: meta.delayDays,
       subject: "",
       body: "تعذّر توليد هذه الرسالة، حاول مرة أخرى.",
@@ -261,6 +278,7 @@ ${companyContext ? `\nسياق عملنا (Company Context):\n${companyContext}\
     return SEQUENCE_STEP_META.map((meta, idx) => ({
       step: (idx + 1) as 1 | 2 | 3,
       label: meta.label,
+      channel: meta.channel,
       delayDays: meta.delayDays,
       subject: typeof rawSteps[idx]?.subject === "string" ? rawSteps[idx].subject : "",
       body: typeof rawSteps[idx]?.body === "string" ? rawSteps[idx].body : "",
@@ -379,5 +397,285 @@ ${notes ? `- ملاحظات إضافية عنها: ${notes}\n` : ""}
   } catch (error) {
     console.error("AI Company Enrichment Error:", error);
     return EMPTY_COMPANY_PROFILE;
+  }
+}
+
+export type ObjectionHandling = {
+  objection: string;
+  response: string;
+};
+
+export type SalesBattlecard = {
+  pitchHook: string;
+  callScript: string;
+  objections: ObjectionHandling[];
+};
+
+const EMPTY_BATTLECARD: SalesBattlecard = { pitchHook: "", callScript: "", objections: [] };
+
+/**
+ * يُعِدّ المندوب لمكالمة باردة: جملة افتتاحية، سيناريو اتصال كامل (~دقيقتان)،
+ * ومصفوفة تعامل مع أشهر 4 اعتراضات (السعر، ضيق الوقت، منافس موجود، الميزانية)
+ * بترتيب ثابت حتى تبقى الواجهة قابلة للتوقع بغض النظر عن مخرجات النموذج.
+ */
+export async function generateSalesBattlecard(
+  name: string,
+  company: string | null,
+  intent: string | null,
+  settings?: OutreachSettings
+): Promise<SalesBattlecard> {
+  const tone = settings?.tone ?? DEFAULT_TONE;
+  const language = settings?.language ?? DEFAULT_LANGUAGE;
+  const valueProposition = settings?.valueProposition?.trim();
+  const companyContext = settings?.companyContext?.trim();
+
+  try {
+    const prompt = `
+أنت مدرّب مبيعات B2B خبير يُعِدّ مندوب مبيعات لمكالمة باردة مع عميل محتمل.
+${companyContext ? `\nسياق عملنا:\n${companyContext}\n` : ""}${
+      valueProposition ? `\nنبذة عن شركتنا:\n${valueProposition}\n` : ""
+    }${enrichmentPromptBlock(settings)}
+العميل المستهدف:
+- الاسم: ${name}
+- الشركة: ${company || "غير محدد"}
+- مستوى الاهتمام المقدَّر: ${intent || "cold"}
+
+المطلوب:
+1. جملة افتتاحية جذابة (pitch_hook) لا تتجاوز 20 كلمة، تُستخدَم في أول 10 ثوانٍ من المكالمة.
+2. سيناريو اتصال كامل مدته دقيقتان تقريباً (call_script) يشمل: الافتتاحية، طرح القيمة المقترحة، سؤال تأهيلي واحد، ودعوة واضحة لحجز موعد — نص متصل جاهز للقراءة أثناء المكالمة.
+3. مصفوفة تعامل مع أشهر 4 اعتراضات (objections) بالترتيب التالي بالضبط: السعر مرتفع جداً، ضيق الوقت حالياً، لدينا حل/منافس بالفعل، لا توجد ميزانية. لكل اعتراض رد مقنع وقصير (2-3 جمل) لا يبدو دفاعياً.
+
+متطلبات اللغة والنبرة: ${LANGUAGE_NAMES[language]}، بنبرة ${TONE_DESCRIPTIONS[tone]}.
+
+أرجع النتيجة بصيغة JSON فقط بهذا الشكل، بـ4 عناصر بالضبط في objections بنفس الترتيب:
+{"pitch_hook": "...", "call_script": "...", "objections": [{"objection": "...", "response": "..."}, {"objection": "...", "response": "..."}, {"objection": "...", "response": "..."}, {"objection": "...", "response": "..."}]}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json" },
+    });
+
+    const data = JSON.parse(response.text || "{}");
+    const rawObjections = Array.isArray(data.objections) ? data.objections : [];
+
+    return {
+      pitchHook: typeof data.pitch_hook === "string" ? data.pitch_hook : "",
+      callScript: typeof data.call_script === "string" ? data.call_script : "",
+      objections: rawObjections
+        .slice(0, 4)
+        .map((o: { objection?: unknown; response?: unknown }) => ({
+          objection: typeof o?.objection === "string" ? o.objection : "",
+          response: typeof o?.response === "string" ? o.response : "",
+        })),
+    };
+  } catch (error) {
+    console.error("AI Battlecard Generation Error:", error);
+    return EMPTY_BATTLECARD;
+  }
+}
+
+export type ProposalItem = {
+  description: string;
+  amount: number;
+};
+
+export type ProposalContent = {
+  items: ProposalItem[];
+  terms: string;
+  validityDays: number;
+};
+
+const EMPTY_PROPOSAL: ProposalContent = { items: [], terms: "", validityDays: 15 };
+
+/** يقترح بنود عرض سعر تجاري تُجمِّع تقريباً قيمة الصفقة المستهدَفة، بناءً على سياق الشركة وقطاع العميل. */
+export async function generateProposalItems(
+  dealTitle: string,
+  dealValue: number,
+  companyContext?: string,
+  enrichedData?: CompanyProfile | null
+): Promise<ProposalContent> {
+  try {
+    const prompt = `
+أنت خبير تسعير B2B تُعِدّ عرض سعر تجاري (Devis) احترافي.
+${companyContext ? `\nسياق عملنا:\n${companyContext}\n` : ""}
+الصفقة:
+- العنوان: ${dealTitle}
+- القيمة الإجمالية المستهدفة: ${dealValue}
+${enrichedData?.industry ? `- قطاع العميل: ${enrichedData.industry}\n` : ""}${
+      enrichedData?.companyModel ? `- حجم/نموذج العميل: ${enrichedData.companyModel}\n` : ""
+    }
+المطلوب:
+1. بنود خدمة مقترحة (items) تُجمِّع في مجموعها القيمة الإجمالية أعلاه تقريباً — 3 إلى 5 بنود واقعية ومنطقية لهذا النوع من الصفقات.
+2. شروط تجارية موجزة (terms) — مدة الصلاحية، طريقة الدفع المقترحة، وملاحظة قانونية بسيطة.
+3. عدد أيام صلاحية العرض (validity_days) — رقم منطقي بين 7 و30.
+
+أرجع النتيجة بصيغة JSON فقط بهذا الشكل:
+{"items": [{"description": "...", "amount": 1000}], "terms": "...", "validity_days": 15}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json" },
+    });
+
+    const data = JSON.parse(response.text || "{}");
+    const rawItems = Array.isArray(data.items) ? data.items : [];
+
+    return {
+      items: rawItems
+        .slice(0, 6)
+        .map((i: { description?: unknown; amount?: unknown }) => ({
+          description: typeof i?.description === "string" ? i.description : "",
+          amount: typeof i?.amount === "number" ? i.amount : 0,
+        }))
+        .filter((i: ProposalItem) => i.description),
+      terms: typeof data.terms === "string" ? data.terms : "",
+      validityDays: typeof data.validity_days === "number" ? data.validity_days : 15,
+    };
+  } catch (error) {
+    console.error("AI Proposal Generation Error:", error);
+    return EMPTY_PROPOSAL;
+  }
+}
+
+export type SuggestedReplyType = "confirm_meeting" | "clarify_pricing" | "negotiate";
+
+export type SuggestedReply = {
+  type: SuggestedReplyType;
+  subject: string;
+  body: string;
+};
+
+export const SUGGESTED_REPLY_LABELS_AR: Record<SuggestedReplyType, string> = {
+  confirm_meeting: "تأكيد موعد",
+  clarify_pricing: "توضيح الأسعار",
+  negotiate: "رد تفاوضي",
+};
+
+const SUGGESTED_REPLY_TYPES: SuggestedReplyType[] = ["confirm_meeting", "clarify_pricing", "negotiate"];
+
+/** يحلّل رداً وارداً فعلياً من عميل ويقترح 3 مسودات رد بزوايا مختلفة، قابلة للتعديل قبل الإرسال. */
+export async function generateSuggestedReplies(
+  inboundMessage: string,
+  leadName: string,
+  settings?: OutreachSettings & { bookingUrl?: string | null }
+): Promise<SuggestedReply[]> {
+  const tone = settings?.tone ?? DEFAULT_TONE;
+  const language = settings?.language ?? DEFAULT_LANGUAGE;
+  const companyContext = settings?.companyContext?.trim();
+  const valueProposition = settings?.valueProposition?.trim();
+  const bookingUrl = settings?.bookingUrl?.trim();
+
+  const fallback = (): SuggestedReply[] =>
+    SUGGESTED_REPLY_TYPES.map((type) => ({ type, subject: "", body: "تعذّر توليد الرد، حاول مرة أخرى." }));
+
+  try {
+    const prompt = `
+أنت مندوب مبيعات B2B محترف يرد على استفسار وارد من عميل محتمل.
+${companyContext ? `\nسياق عملنا:\n${companyContext}\n` : ""}${
+      valueProposition ? `\nنبذة عن شركتنا:\n${valueProposition}\n` : ""
+    }
+رسالة العميل الواردة (من ${leadName}):
+"""
+${inboundMessage.slice(0, 2000)}
+"""
+
+المطلوب: 3 مسودات رد مستقلة بالترتيب التالي بالضبط:
+1. رد لتأكيد موعد ودعوة صريحة لحجزه${bookingUrl ? ` عبر هذا الرابط: ${bookingUrl}` : ""}.
+2. رد يوضّح الأسعار أو نموذج التسعير بشكل عام دون أرقام مختلقة (اطلب توضيح الاحتياج إن لزم لتحديد السعر بدقة).
+3. رد تفاوضي مخصص يعالج فحوى الرسالة الواردة مباشرة بناءً على ما ورد فيها فعلياً.
+
+متطلبات كل رد: لغة الرد بالكامل ${LANGUAGE_NAMES[language]}، نبرة ${TONE_DESCRIPTIONS[tone]}، عنوان (subject) قصير مناسب للرد على البريد، ومتن (body) بين 40 و100 كلمة.
+
+أرجع النتيجة بصيغة JSON فقط بهذا الشكل، بنفس الترتيب (3 عناصر بالضبط):
+{"replies": [{"subject": "...", "body": "..."}, {"subject": "...", "body": "..."}, {"subject": "...", "body": "..."}]}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json" },
+    });
+
+    const data = JSON.parse(response.text || "{}");
+    const rawReplies = Array.isArray(data.replies) ? data.replies : [];
+
+    return SUGGESTED_REPLY_TYPES.map((type, idx) => ({
+      type,
+      subject: typeof rawReplies[idx]?.subject === "string" ? rawReplies[idx].subject : "",
+      body: typeof rawReplies[idx]?.body === "string" ? rawReplies[idx].body : "",
+    }));
+  } catch (error) {
+    console.error("AI Suggested Replies Error:", error);
+    return fallback();
+  }
+}
+
+export type ProspectCandidate = {
+  companyName: string;
+  estimatedEmail: string;
+  location: string;
+  suggestedTitle: string;
+  suggestedContactName: string;
+  notes: string;
+};
+
+/**
+ * يُولِّد شركات مستهدَفة توضيحية (محاكاة) بناءً على قطاع ومنطقة — وليس بحثاً
+ * حقيقياً في بيانات فعلية (لا تكامل مع أي مصدر بيانات شركات خارجي في هذا
+ * المشروع). كل الحقول تقديرية ويجب التحقق منها يدوياً قبل أي تواصل فعلي —
+ * هذا التحذير يظهر أيضاً في الواجهة، وليس فقط هنا.
+ */
+export async function findProspectCandidates(industry: string, location: string): Promise<ProspectCandidate[]> {
+  try {
+    const prompt = `
+أنت مساعد بحث عن عملاء B2B محتملين. المستخدم يبحث عن شركات في القطاع/النشاط التالي: "${industry}"، في المنطقة/المدينة: "${location}".
+
+هذه بيانات توضيحية (Simulation) وليست بحثاً حقيقياً في مصدر بيانات فعلي — لا تدّعِ معرفة شركات حقيقية بأسماء وعناوين بريد مؤكدة. أنشئ 6 أمثلة واقعية ومعقولة لأنواع شركات قد توجد فعلاً في هذا القطاع والمنطقة (أسماء تقديرية واقعية الشكل)، مع بريد إلكتروني تقديري بصيغة معقولة (لا تستخدم أسماء نطاقات لشركات حقيقية معروفة).
+
+لكل شركة تقديرية أرجع:
+- company_name: اسم شركة تقديري واقعي الشكل
+- estimated_email: بريد تقديري بصيغة contact@domaine.com معقولة
+- location: المدينة/الدولة
+- suggested_title: المنصب الأنسب للتواصل معه في هذا النوع من الشركات (مثال: Directeur Commercial)
+- suggested_contact_name: اسم شخص تقديري واقعي لهذا المنصب
+- notes: جملة واحدة عن سبب كون هذا النوع من الشركات عميلاً محتملاً جيداً
+
+أرجع النتيجة بصيغة JSON فقط بهذا الشكل:
+{"candidates": [{"company_name": "...", "estimated_email": "...", "location": "...", "suggested_title": "...", "suggested_contact_name": "...", "notes": "..."}]}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json" },
+    });
+
+    const data = JSON.parse(response.text || "{}");
+    const rawCandidates = Array.isArray(data.candidates) ? data.candidates : [];
+
+    return rawCandidates.slice(0, 8).map(
+      (c: {
+        company_name?: unknown;
+        estimated_email?: unknown;
+        location?: unknown;
+        suggested_title?: unknown;
+        suggested_contact_name?: unknown;
+        notes?: unknown;
+      }) => ({
+        companyName: typeof c?.company_name === "string" ? c.company_name : "",
+        estimatedEmail: typeof c?.estimated_email === "string" ? c.estimated_email : "",
+        location: typeof c?.location === "string" ? c.location : location,
+        suggestedTitle: typeof c?.suggested_title === "string" ? c.suggested_title : "",
+        suggestedContactName: typeof c?.suggested_contact_name === "string" ? c.suggested_contact_name : "",
+        notes: typeof c?.notes === "string" ? c.notes : "",
+      })
+    ).filter((c: ProspectCandidate) => c.companyName);
+  } catch (error) {
+    console.error("AI Prospect Finder Error:", error);
+    return [];
   }
 }
