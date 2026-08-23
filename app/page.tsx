@@ -1,9 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
-import { PlusCircle, Download } from "lucide-react";
+import Link from "next/link";
+import { PlusCircle, Download, CreditCard } from "lucide-react";
 import { getLeads, addLead } from "./actions/leads";
 import { getDeals, createDeal } from "./actions/deals";
-import { getAutopilotSetting, getOnboardingStatus, getBranding } from "./actions/settings";
+import { getAutopilotSetting, getOnboardingStatus, getBranding, getSubscriptionInfo } from "./actions/settings";
 import { computeCrmStats, computeFunnel, computeLeaderboard } from "@/lib/analytics";
 import { getAppUrl } from "@/lib/appUrl";
 import { getOrgMembers } from "@/lib/team";
@@ -15,6 +16,8 @@ import AutoPilotToggle from "./components/AutoPilotToggle";
 import SettingsModal from "./components/SettingsModal";
 import OnboardingWizard from "./components/OnboardingWizard";
 import LandingPage from "./components/LandingPage";
+import CreditUsageBar from "./components/CreditUsageBar";
+import QuotaLimitBanner from "./components/QuotaLimitBanner";
 
 export default async function Home() {
   const { userId, orgId } = await auth();
@@ -30,6 +33,10 @@ export default async function Home() {
   const members = orgId ? await getOrgMembers(orgId) : [];
   const onboardingCompleted = orgId ? await getOnboardingStatus() : true;
   const branding = orgId ? await getBranding() : { orgDisplayName: "", logoUrl: "", brandColor: "" };
+  const subscription = orgId ? await getSubscriptionInfo() : null;
+  const quotaExceeded = Boolean(
+    subscription && subscription.aiMonthlyQuota > 0 && subscription.aiUsageCount >= subscription.aiMonthlyQuota
+  );
   const stats = computeCrmStats(leads, deals);
   const funnel = computeFunnel(leads, deals);
   const leaderboard = computeLeaderboard(leads, deals, members);
@@ -185,8 +192,16 @@ export default async function Home() {
           </div>
 
           <div className="flex items-center gap-4">
-            {orgId && (
+            {orgId && subscription && (
               <div className="flex items-center gap-2" key={orgId}>
+                <CreditUsageBar used={subscription.aiUsageCount} quota={subscription.aiMonthlyQuota} />
+                <Link
+                  href="/billing"
+                  title="الفوترة والاشتراكات"
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                >
+                  <CreditCard size={16} />
+                </Link>
                 <AutoPilotToggle initialEnabled={autopilotEnabled} />
                 <SettingsModal />
               </div>
@@ -195,6 +210,8 @@ export default async function Home() {
             <UserButton />
           </div>
         </header>
+
+        {quotaExceeded && <QuotaLimitBanner />}
 
         {/* مساحة العمل بعد تسجيل الدخول */}
         {!orgId ? (
