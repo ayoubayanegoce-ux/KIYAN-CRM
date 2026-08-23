@@ -1,10 +1,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { supabase } from "@/lib/supabase";
-import { qualifyLead } from "@/lib/ai";
-import { logActivity } from "@/lib/activity";
-import { maybeRunAutoPilot } from "@/lib/autopilot";
+import { createQualifiedLead } from "@/lib/leadIntake";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_FIELD_LENGTH = 200;
@@ -60,46 +57,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "بريد إلكتروني غير صالح" }, { status: 400 });
   }
 
-  const { ai_score, ai_intent } = await qualifyLead(name, email, company);
-
-  const { data, error } = await supabase
-    .from("leads")
-    .insert([
-      {
-        org_id: orgId,
-        name,
-        email,
-        company,
-        status: "new",
-        ai_score,
-        ai_intent,
-      },
-    ])
-    .select("id")
-    .single();
-
-  if (error) {
+  try {
+    const result = await createQualifiedLead(orgId, { name, email, company }, "webhook");
+    revalidatePath("/");
+    return NextResponse.json(
+      { success: true, lead_id: result.id, ai_score: result.ai_score, ai_intent: result.ai_intent },
+      { status: 201 }
+    );
+  } catch (error) {
     console.error("Webhook lead insert error:", error);
     return NextResponse.json({ error: "تعذر حفظ العميل" }, { status: 500 });
   }
-
-  await logActivity({
-    orgId,
-    leadId: data.id,
-    type: "lead_created",
-    description: `تم استقبال عميل جديد عبر Webhook: ${name}`,
-  });
-  await logActivity({
-    orgId,
-    leadId: data.id,
-    type: "ai_qualified",
-    description: `تقييم الذكاء الاصطناعي: ${ai_score}/100 (${ai_intent})`,
-    metadata: { ai_score, ai_intent },
-  });
-
-  await maybeRunAutoPilot(orgId, { id: data.id, name, email, company, ai_score, ai_intent });
-
-  revalidatePath("/");
-
-  return NextResponse.json({ success: true, lead_id: data.id, ai_score, ai_intent }, { status: 201 });
 }

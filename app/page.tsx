@@ -5,17 +5,20 @@ import { getLeads, addLead } from "./actions/leads";
 import { getDeals, createDeal } from "./actions/deals";
 import { getAutopilotSetting } from "./actions/settings";
 import { computeCrmStats } from "@/lib/analytics";
+import { getAppUrl } from "@/lib/appUrl";
 import DashboardTabs from "./components/DashboardTabs";
 import DealsKanban from "./components/DealsKanban";
 import LeadsList from "./components/LeadsList";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import AutoPilotToggle from "./components/AutoPilotToggle";
+import SettingsModal from "./components/SettingsModal";
 
 export default async function Home() {
   const { userId, orgId } = await auth();
   const leads = orgId ? await getLeads() : [];
   const deals = orgId ? await getDeals() : [];
   const autopilotEnabled = orgId ? await getAutopilotSetting() : false;
+  const appUrl = orgId ? await getAppUrl() : "";
   const stats = computeCrmStats(leads, deals);
 
   const leadsContent = (
@@ -127,7 +130,9 @@ export default async function Home() {
     </div>
   );
 
-  const analyticsContent = <AnalyticsPanel stats={stats} />;
+  const analyticsContent = orgId ? (
+    <AnalyticsPanel stats={stats} orgId={orgId} appUrl={appUrl} />
+  ) : null;
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
@@ -154,7 +159,12 @@ export default async function Home() {
             </div>
           ) : (
             <div className="flex items-center gap-4">
-              {orgId && <AutoPilotToggle key={orgId} initialEnabled={autopilotEnabled} />}
+              {orgId && (
+                <div className="flex items-center gap-2" key={orgId}>
+                  <AutoPilotToggle initialEnabled={autopilotEnabled} />
+                  <SettingsModal />
+                </div>
+              )}
               <OrganizationSwitcher afterCreateOrganizationUrl="/" afterSelectOrganizationUrl="/" />
               <UserButton />
             </div>

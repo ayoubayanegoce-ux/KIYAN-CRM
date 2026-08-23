@@ -5,7 +5,7 @@
 - **UI & Styling**: React 19, Tailwind CSS v4, Lucide Icons
 - **Auth & Multi-tenancy**: Clerk v7 (`@clerk/nextjs` with Organizations & `auth()`)
 - **Database**: Supabase PostgreSQL (`@supabase/supabase-js`) with RLS
-- **AI Agent**: Google GenAI (`@google/genai`, model: `gemini-2.5-flash`)
+- **AI Agent**: Google GenAI (`@google/genai`, model: `gemini-3.6-flash`)
 
 ## Database Schema (Supabase)
 - **leads**: `id` (uuid), `org_id` (text), `name` (text), `email` (text), `company` (text), `status` (text), `ai_score` (int), `ai_intent` (text: 'hot'|'warm'|'cold'), `created_at` (timestamptz)

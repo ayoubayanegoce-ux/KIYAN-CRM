@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
+import { notifyAutoPilotSent } from "@/lib/whatsapp";
 import { revalidatePath } from "next/cache";
 
 const resend = new Resend(process.env.RESEND_API_KEY || "");
@@ -28,7 +29,7 @@ export async function sendLeadEmail(
 
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("email, name")
+    .select("email, name, company")
     .eq("id", leadId)
     .eq("org_id", orgId)
     .single();
@@ -63,6 +64,10 @@ export async function sendLeadEmail(
         : `تم إرسال بريد تسويقي: "${subject}"`,
     metadata: { subject, source },
   });
+
+  if (source === "autopilot") {
+    await notifyAutoPilotSent({ name: lead.name, company: lead.company ?? null }, subject);
+  }
 
   revalidatePath("/");
   return { success: true as const };

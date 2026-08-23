@@ -2,10 +2,19 @@ import type { ReactNode } from "react";
 import { DollarSign, Flame, TrendingUp } from "lucide-react";
 import type { CrmStats } from "@/lib/analytics";
 import AiInsightCard from "./AiInsightCard";
+import EmbedFormCard from "./EmbedFormCard";
 
 const currency = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
-export default function AnalyticsPanel({ stats }: { stats: CrmStats }) {
+export default function AnalyticsPanel({
+  stats,
+  orgId,
+  appUrl,
+}: {
+  stats: CrmStats;
+  orgId: string;
+  appUrl: string;
+}) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -30,6 +39,7 @@ export default function AnalyticsPanel({ stats }: { stats: CrmStats }) {
       </div>
 
       <AiInsightCard />
+      <EmbedFormCard orgId={orgId} appUrl={appUrl} />
     </div>
   );
 }

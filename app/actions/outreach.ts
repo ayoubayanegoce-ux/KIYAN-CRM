@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { generateOutreachEmail } from "@/lib/ai";
+import { getAISettings } from "@/app/actions/settings";
 
 export async function generateOutreachForLead(leadId: string) {
   const { orgId } = await auth();
@@ -17,5 +18,11 @@ export async function generateOutreachForLead(leadId: string) {
 
   if (error || !lead) throw new Error("العميل غير موجود");
 
-  return generateOutreachEmail(lead.name, lead.company, lead.ai_intent);
+  const settings = await getAISettings();
+
+  return generateOutreachEmail(lead.name, lead.company, lead.ai_intent, {
+    tone: settings.tone,
+    language: settings.language,
+    valueProposition: settings.valueProposition,
+  });
 }

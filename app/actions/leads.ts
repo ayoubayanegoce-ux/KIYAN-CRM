@@ -6,6 +6,7 @@ import { qualifyLead } from "@/lib/ai";
 import { parseCsv } from "@/lib/csv";
 import { logActivity } from "@/lib/activity";
 import { maybeRunAutoPilot } from "@/lib/autopilot";
+import { notifyHotLead } from "@/lib/whatsapp";
 import { revalidatePath } from "next/cache";
 
 export type ImportSkip = { row: number; reason: string };
@@ -40,7 +41,7 @@ export async function addLead(formData: FormData) {
   const company = formData.get("company") as string;
 
   // تشغيل وكيل الذكاء الاصطناعي لتقييم العميل فورياً
-  const { ai_score, ai_intent } = await qualifyLead(name, email, company);
+  const { ai_score, ai_intent, reasoning } = await qualifyLead(name, email, company);
 
   const { data, error } = await supabase
     .from("leads")
@@ -71,8 +72,12 @@ export async function addLead(formData: FormData) {
     leadId: data.id,
     type: "ai_qualified",
     description: `تقييم الذكاء الاصطناعي: ${ai_score}/100 (${ai_intent})`,
-    metadata: { ai_score, ai_intent },
+    metadata: { ai_score, ai_intent, reasoning },
   });
+
+  if (ai_intent === "hot") {
+    await notifyHotLead({ name, email, company: company || null, ai_score, ai_intent, reasoning });
+  }
 
   await maybeRunAutoPilot(orgId, { id: data.id, name, email, company, ai_score, ai_intent });
 
@@ -111,8 +116,8 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
 
   const qualified = await Promise.all(
     valid.map(async (lead) => {
-      const { ai_score, ai_intent } = await qualifyLead(lead.name, lead.email, lead.company);
-      return { ...lead, ai_score, ai_intent };
+      const { ai_score, ai_intent, reasoning } = await qualifyLead(lead.name, lead.email, lead.company);
+      return { ...lead, ai_score, ai_intent, reasoning };
     })
   );
 
@@ -149,8 +154,19 @@ export async function importLeadsFromCsv(csvText: string): Promise<ImportResult>
         leadId,
         type: "ai_qualified",
         description: `تقييم الذكاء الاصطناعي: ${lead.ai_score}/100 (${lead.ai_intent})`,
-        metadata: { ai_score: lead.ai_score, ai_intent: lead.ai_intent },
+        metadata: { ai_score: lead.ai_score, ai_intent: lead.ai_intent, reasoning: lead.reasoning },
       });
+
+      if (lead.ai_intent === "hot") {
+        await notifyHotLead({
+          name: lead.name,
+          email: lead.email,
+          company: lead.company || null,
+          ai_score: lead.ai_score,
+          ai_intent: lead.ai_intent,
+          reasoning: lead.reasoning,
+        });
+      }
 
       await maybeRunAutoPilot(orgId, {
         id: leadId,
