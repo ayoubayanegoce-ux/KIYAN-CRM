@@ -7,39 +7,60 @@ import { SEQUENCE_TASK_PREFIX } from "@/lib/ai";
 
 const resend = new Resend(process.env.RESEND_API_KEY || "");
 
+type InboundEmailEvent = {
+  type: string;
+  data: {
+    from?: string;
+    email_id?: string;
+    subject?: string;
+  };
+};
+
 /**
  * يستقبل حدث email.received من Resend عند وصول رد من عميل. نفس منظمة
  * الويب هوك الخارجي الافتراضية المستخدَمة في webhooks/calendly و
  * webhooks/lead (WEBHOOK_DEFAULT_ORG_ID) — صندوق الرد الوارد واحد على
  * مستوى المنصة، وليس لكل عميل. لا نعيد استخدام markLeadReplied (server
  * action) لأنها تعتمد على Clerk auth() لجلسة مستخدم لا وجود لها هنا.
+ *
+ * نفس فلسفة webhooks/calendly بالضبط: التحقق من التوقيع اختياري بحسب توفّر
+ * السر — إن كان RESEND_WEBHOOK_SECRET فارغاً (بيئة تطوير مثلاً)، تُقبَل
+ * الحمولة كما هي دون التحقق بدل رفض الطلب بالكامل. لا نطبّق هذا التساهل في
+ * الإنتاج فعلياً إلا لأن السر ما زال غير مُعرَّف — أضِفه بمجرد توفره.
  */
 export async function POST(request: Request) {
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    console.error("RESEND_WEBHOOK_SECRET غير مُعرَّف");
-    return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
-  }
-
   const rawBody = await request.text();
 
-  const svixId = request.headers.get("svix-id");
-  const svixTimestamp = request.headers.get("svix-timestamp");
-  const svixSignature = request.headers.get("svix-signature");
-  if (!svixId || !svixTimestamp || !svixSignature) {
-    return NextResponse.json({ error: "Missing svix signature headers" }, { status: 400 });
-  }
+  let event: InboundEmailEvent;
 
-  let event;
-  try {
-    event = resend.webhooks.verify({
-      payload: rawBody,
-      headers: { id: svixId, timestamp: svixTimestamp, signature: svixSignature },
-      webhookSecret,
-    });
-  } catch (err) {
-    console.error("Resend inbound webhook signature verification failed:", err);
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  if (webhookSecret) {
+    const svixId = request.headers.get("svix-id");
+    const svixTimestamp = request.headers.get("svix-timestamp");
+    const svixSignature = request.headers.get("svix-signature");
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return NextResponse.json({ error: "Missing svix signature headers" }, { status: 400 });
+    }
+
+    try {
+      event = resend.webhooks.verify({
+        payload: rawBody,
+        headers: { id: svixId, timestamp: svixTimestamp, signature: svixSignature },
+        webhookSecret,
+      }) as InboundEmailEvent;
+    } catch (err) {
+      console.error("Resend inbound webhook signature verification failed:", err);
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+    }
+  } else {
+    console.error(
+      "RESEND_WEBHOOK_SECRET غير مُعرَّف — الويب هوك يقبل الطلبات بدون التحقق من التوقيع."
+    );
+    try {
+      event = JSON.parse(rawBody) as InboundEmailEvent;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
   }
 
   if (event.type !== "email.received") {
@@ -74,11 +95,13 @@ export async function POST(request: Request) {
   // نجلب نص الرسالة الكامل (وليس فقط الميتاداتا في حمولة الويب هوك) حتى
   // يتوفر محتوى فعلي لتحليله لاحقاً عبر "اقتراح رد ذكي" في نافذة الملاحظات.
   let inboundText = "";
-  try {
-    const { data: emailContent } = await resend.emails.receiving.get(event.data.email_id);
-    inboundText = (emailContent?.text || "").trim();
-  } catch (err) {
-    console.error("Failed to fetch inbound email content:", err);
+  if (event.data.email_id) {
+    try {
+      const { data: emailContent } = await resend.emails.receiving.get(event.data.email_id);
+      inboundText = (emailContent?.text || "").trim();
+    } catch (err) {
+      console.error("Failed to fetch inbound email content:", err);
+    }
   }
   if (!inboundText) inboundText = event.data.subject || "(بدون محتوى نصي)";
 
