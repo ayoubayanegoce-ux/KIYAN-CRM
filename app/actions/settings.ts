@@ -11,12 +11,14 @@ export type AISettings = {
   tone: AITone;
   language: AILanguage;
   valueProposition: string;
+  bookingUrl: string;
 };
 
 const DEFAULT_AI_SETTINGS: AISettings = {
   tone: "professionnel",
   language: "fr",
   valueProposition: "",
+  bookingUrl: "",
 };
 
 export async function getAISettings(): Promise<AISettings> {
@@ -25,7 +27,7 @@ export async function getAISettings(): Promise<AISettings> {
 
   const { data, error } = await supabase
     .from("org_settings")
-    .select("ai_tone, ai_language, ai_value_proposition")
+    .select("ai_tone, ai_language, ai_value_proposition, booking_url")
     .eq("org_id", orgId)
     .maybeSingle();
 
@@ -35,6 +37,7 @@ export async function getAISettings(): Promise<AISettings> {
     tone: (data.ai_tone as AITone) ?? DEFAULT_AI_SETTINGS.tone,
     language: (data.ai_language as AILanguage) ?? DEFAULT_AI_SETTINGS.language,
     valueProposition: data.ai_value_proposition ?? "",
+    bookingUrl: data.booking_url ?? "",
   };
 }
 
@@ -48,6 +51,7 @@ export async function setAISettings(settings: AISettings) {
       ai_tone: settings.tone,
       ai_language: settings.language,
       ai_value_proposition: settings.valueProposition,
+      booking_url: settings.bookingUrl.trim() || null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "org_id" }

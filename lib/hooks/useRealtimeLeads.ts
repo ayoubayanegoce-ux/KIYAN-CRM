@@ -13,6 +13,8 @@ export type LeadRow = {
   status: string | null;
   ai_score: number | null;
   ai_intent: string | null;
+  sequence_status: string | null;
+  sequence_step: number | null;
   created_at: string;
 };
 

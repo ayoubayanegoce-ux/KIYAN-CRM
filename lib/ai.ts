@@ -145,6 +145,9 @@ export const SEQUENCE_STEP_LABELS_AR: Record<SequenceStepLabel, string> = {
   breakup: "رسالة الختام",
 };
 
+/** بادئة عنوان مهام التسلسل المُجدوَلة تلقائياً — تُستخدم لتمييزها عن مهام المتابعة اليدوية العادية. */
+export const SEQUENCE_TASK_PREFIX = "📧 ";
+
 const SEQUENCE_STEP_META: { label: SequenceStepLabel; delayDays: number; instructionsAr: string }[] = [
   {
     label: "initial_pitch",

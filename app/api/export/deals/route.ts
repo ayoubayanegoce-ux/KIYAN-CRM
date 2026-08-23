@@ -19,14 +19,24 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const headers = ["id", "title", "stage", "value", "lead_name", "lead_company", "created_at"];
+  const headers = [
+    "id",
+    "title",
+    "stage",
+    "deal_value",
+    "win_probability",
+    "lead_name",
+    "lead_company",
+    "created_at",
+  ];
   const csv = rowsToCsv(
     headers,
     (data ?? []).map((deal) => ({
       id: deal.id,
       title: deal.title,
       stage: deal.stage ?? "",
-      value: deal.value ?? 0,
+      deal_value: deal.deal_value ?? 0,
+      win_probability: deal.win_probability ?? "",
       lead_name: deal.leads?.name ?? "",
       lead_company: deal.leads?.company ?? "",
       created_at: deal.created_at ?? "",

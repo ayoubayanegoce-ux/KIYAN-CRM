@@ -2,11 +2,20 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
-import { generateOutreachEmail, generateSequenceSteps, SEQUENCE_STEP_LABELS_AR, type SequenceStep } from "@/lib/ai";
+import {
+  generateOutreachEmail,
+  generateSequenceSteps,
+  SEQUENCE_STEP_LABELS_AR,
+  SEQUENCE_TASK_PREFIX,
+  type SequenceStep,
+} from "@/lib/ai";
 import { getAISettings } from "@/app/actions/settings";
 import { getCrmContext } from "@/lib/crmContext";
 import { sendLeadEmail } from "@/lib/resend";
+import { getBookingUrl, bookingCtaText } from "@/lib/booking";
+import { logActivity } from "@/lib/activity";
 import { addFollowUpTask } from "@/app/actions/activities";
+import { revalidatePath } from "next/cache";
 
 async function getLeadForOutreach(leadId: string, orgId: string) {
   const { data: lead, error } = await supabase
@@ -67,14 +76,68 @@ export async function approveSequence(leadId: string, steps: SequenceStep[]) {
 
   await sendLeadEmail(orgId, leadId, firstStep.subject, firstStep.body, "manual");
 
+  await supabase
+    .from("leads")
+    .update({ sequence_status: "active", sequence_step: 1 })
+    .eq("id", leadId)
+    .eq("org_id", orgId);
+
+  // نُرفق رابط الحجز أيضاً بمسودات المهام المجدولة (نسخة نصية) كي يبقى جاهزاً
+  // للنسخ عند إرسال الخطوة يدوياً لاحقاً — الإرسال الفعلي لا يمر عبر sendLeadEmail.
+  const bookingUrl = await getBookingUrl(orgId);
+
   for (const step of remainingSteps) {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + step.delayDays);
     const dueDateStr = dueDate.toISOString().slice(0, 10);
-    const title = `📧 ${SEQUENCE_STEP_LABELS_AR[step.label]}: ${step.subject}`.slice(0, 200);
+    const title = `${SEQUENCE_TASK_PREFIX}${SEQUENCE_STEP_LABELS_AR[step.label]}: ${step.subject}`.slice(0, 200);
+    const description = step.body + bookingCtaText(bookingUrl);
 
-    await addFollowUpTask(leadId, title, dueDateStr, step.body);
+    await addFollowUpTask(leadId, title, dueDateStr, description);
   }
 
+  revalidatePath("/");
   return { success: true as const };
+}
+
+/**
+ * زر بنقرة واحدة: يُستخدَم عندما يلاحظ المندوب رداً فعلياً من العميل (لا يوجد
+ * كشف تلقائي للردود في هذا المشروع — لا تكامل مع صندوق البريد). يُسجَّل العميل
+ * كـ "replied" ويُلغي أي خطوات تسلسل معلّقة تلقائياً حتى لا تُرسَل بعد فوات الأوان.
+ */
+export async function markLeadReplied(leadId: string) {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ sequence_status: "replied" })
+    .eq("id", leadId)
+    .eq("org_id", orgId);
+
+  if (error) throw new Error(error.message);
+
+  const { data: pendingTasks } = await supabase
+    .from("tasks")
+    .select("id, title")
+    .eq("org_id", orgId)
+    .eq("lead_id", leadId)
+    .eq("status", "pending");
+
+  const sequenceTaskIds = (pendingTasks ?? [])
+    .filter((t) => t.title.startsWith(SEQUENCE_TASK_PREFIX))
+    .map((t) => t.id);
+
+  if (sequenceTaskIds.length > 0) {
+    await supabase.from("tasks").update({ status: "cancelled" }).in("id", sequenceTaskIds);
+  }
+
+  await logActivity({
+    orgId,
+    leadId,
+    type: "sequence_paused",
+    description: "✅ تم تسجيل رد العميل وإيقاف تسلسل المتابعة تلقائياً",
+  });
+
+  revalidatePath("/");
 }

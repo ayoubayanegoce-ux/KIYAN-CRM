@@ -7,6 +7,7 @@ import { useRealtimeDeals } from "@/lib/hooks/useRealtimeDeals";
 
 const STAGES: { key: DealStage; label: string; accent: string }[] = [
   { key: "discovery", label: "Discovery", accent: "border-sky-800/60 bg-sky-950/20" },
+  { key: "meeting_scheduled", label: "Meeting Scheduled", accent: "border-teal-800/60 bg-teal-950/20" },
   { key: "proposal", label: "Proposal", accent: "border-indigo-800/60 bg-indigo-950/20" },
   { key: "negotiation", label: "Negotiation", accent: "border-amber-800/60 bg-amber-950/20" },
   { key: "won", label: "Won", accent: "border-emerald-800/60 bg-emerald-950/20" },
@@ -54,10 +55,10 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
       {STAGES.map((s) => {
         const stageDeals = optimisticDeals.filter((d) => d.stage === s.key);
-        const total = stageDeals.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+        const total = stageDeals.reduce((sum, d) => sum + (Number(d.deal_value) || 0), 0);
         const isOver = overStage === s.key;
 
         return (
@@ -110,7 +111,7 @@ export default function DealsKanban({ deals, orgId }: { deals: DealRow[]; orgId:
                       )}
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs text-emerald-400 font-mono">
-                          {currency.format(Number(deal.value) || 0)} €
+                          {currency.format(Number(deal.deal_value) || 0)} €
                         </p>
                         <span className="text-[10px] text-amber-400 font-mono bg-amber-950/40 px-1.5 py-0.5 rounded">
                           🎯 {deal.win_probability ?? 50}%

@@ -5,14 +5,20 @@ import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 
-export type DealStage = "discovery" | "proposal" | "negotiation" | "won" | "lost";
+export type DealStage =
+  | "discovery"
+  | "meeting_scheduled"
+  | "proposal"
+  | "negotiation"
+  | "won"
+  | "lost";
 
 export type DealRow = {
   id: string;
   org_id: string;
   lead_id: string | null;
   title: string;
-  value: number;
+  deal_value: number;
   win_probability: number | null;
   stage: DealStage;
   created_at: string;
@@ -27,7 +33,14 @@ function clampProbability(raw: FormDataEntryValue | null): number {
   return Math.min(100, Math.max(0, Math.round(num)));
 }
 
-const DEAL_STAGES: DealStage[] = ["discovery", "proposal", "negotiation", "won", "lost"];
+const DEAL_STAGES: DealStage[] = [
+  "discovery",
+  "meeting_scheduled",
+  "proposal",
+  "negotiation",
+  "won",
+  "lost",
+];
 
 export async function getDeals() {
   const { orgId } = await auth();
@@ -52,7 +65,7 @@ export async function createDeal(formData: FormData) {
 
   const title = (formData.get("title") as string)?.trim();
   const leadId = (formData.get("lead_id") as string) || null;
-  const value = Number(formData.get("value")) || 0;
+  const dealValue = Number(formData.get("deal_value")) || 0;
   const winProbability = clampProbability(formData.get("win_probability"));
 
   if (!title) throw new Error("عنوان الصفقة مطلوب");
@@ -64,7 +77,7 @@ export async function createDeal(formData: FormData) {
         org_id: orgId,
         lead_id: leadId,
         title,
-        value,
+        deal_value: dealValue,
         win_probability: winProbability,
         stage: "discovery",
       },
@@ -80,7 +93,7 @@ export async function createDeal(formData: FormData) {
     dealId: data.id,
     type: "deal_created",
     description: `تم إنشاء صفقة جديدة: ${title}`,
-    metadata: { value, win_probability: winProbability },
+    metadata: { deal_value: dealValue, win_probability: winProbability },
   });
 
   revalidatePath("/");
@@ -141,7 +154,7 @@ export async function convertLeadToDeal(leadId: string) {
         org_id: orgId,
         lead_id: lead.id,
         title: `${lead.company || lead.name} - Opportunité`,
-        value: 0,
+        deal_value: 0,
         win_probability: DEFAULT_WIN_PROBABILITY,
         stage: "discovery",
       },

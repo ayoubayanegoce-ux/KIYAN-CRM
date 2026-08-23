@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowRightLeft, Download } from "lucide-react";
+import { useState, useTransition } from "react";
+import { ArrowRightLeft, Download, Reply, Loader2 } from "lucide-react";
 import { useRealtimeLeads, type LeadRow } from "@/lib/hooks/useRealtimeLeads";
 import { convertLeadToDeal } from "@/app/actions/deals";
+import { markLeadReplied } from "@/app/actions/outreach";
 import OutreachModal from "./OutreachModal";
 import NotesModal from "./NotesModal";
 import ActivityModal from "./ActivityModal";
@@ -58,7 +60,7 @@ export default function LeadsList({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-xs text-slate-400 font-mono">
                     التقييم: <strong className="text-white">{lead.ai_score ?? 0}/100</strong>
                   </span>
@@ -73,6 +75,8 @@ export default function LeadsList({
                   >
                     {lead.ai_intent ? lead.ai_intent.toUpperCase() : "COLD"}
                   </span>
+
+                  <SequenceEngagement leadId={lead.id} status={lead.sequence_status} step={lead.sequence_step} />
 
                   <OutreachModal leadId={lead.id} leadName={lead.name} />
                   <SequenceModal leadId={lead.id} leadName={lead.name} />
@@ -105,6 +109,69 @@ export default function LeadsList({
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function SequenceEngagement({
+  leadId,
+  status,
+  step,
+}: {
+  leadId: string;
+  status: string | null;
+  step: number | null;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  if (!status || status === "none") return null;
+
+  function handleMarkReplied() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await markLeadReplied(leadId);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "فشل تسجيل الرد");
+      }
+    });
+  }
+
+  const currentStep = step ?? 0;
+
+  return (
+    <div className="flex items-center gap-1.5" title={error ?? undefined}>
+      {status === "active" && (
+        <>
+          <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-medium">
+            Step {currentStep} Sent
+          </span>
+          {currentStep < 3 && (
+            <span className="text-[10px] px-2 py-1 rounded-full bg-amber-950 text-amber-400 border border-amber-800 font-medium">
+              Step {currentStep + 1} Pending
+            </span>
+          )}
+          <button
+            onClick={handleMarkReplied}
+            disabled={isPending}
+            title="تسجيل رد العميل وإيقاف تسلسل المتابعة"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-blue-700 text-slate-300 hover:text-white transition cursor-pointer disabled:opacity-50"
+          >
+            {isPending ? <Loader2 size={12} className="animate-spin" /> : <Reply size={12} />}
+          </button>
+        </>
+      )}
+      {status === "replied" && (
+        <span className="text-[10px] px-2 py-1 rounded-full bg-blue-950 text-blue-400 border border-blue-800 font-medium">
+          Replied ✓
+        </span>
+      )}
+      {status === "completed" && (
+        <span className="text-[10px] px-2 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+          التسلسل مكتمل
+        </span>
       )}
     </div>
   );

@@ -8,7 +8,9 @@ export type ActivityType =
   | "deal_stage_changed"
   | "note_added"
   | "task_scheduled"
-  | "lead_converted";
+  | "lead_converted"
+  | "meeting_scheduled"
+  | "sequence_paused";
 
 /**
  * Internal-only logger — not a server action. Callers (other server actions,

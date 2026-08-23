@@ -1,5 +1,5 @@
 export type DealLike = {
-  value: number | string | null;
+  deal_value: number | string | null;
   stage: string | null;
   win_probability?: number | string | null;
 };
@@ -34,9 +34,9 @@ export function computeCrmStats(leads: LeadLike[], deals: DealLike[]): CrmStats 
 
   const totalPipelineValue = deals
     .filter((d) => d.stage !== "lost")
-    .reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+    .reduce((sum, d) => sum + (Number(d.deal_value) || 0), 0);
 
-  const totalDealsValue = deals.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+  const totalDealsValue = deals.reduce((sum, d) => sum + (Number(d.deal_value) || 0), 0);
   const averageDealValue = totalDealsCount > 0 ? totalDealsValue / totalDealsCount : 0;
   const conversionRate = totalDealsCount > 0 ? (wonDealsCount / totalDealsCount) * 100 : 0;
 
@@ -45,9 +45,9 @@ export function computeCrmStats(leads: LeadLike[], deals: DealLike[]): CrmStats 
   const forecastedRevenue = deals
     .filter((d) => d.stage !== "won" && d.stage !== "lost")
     .reduce((sum, d) => {
-      const value = Number(d.value) || 0;
+      const dealValue = Number(d.deal_value) || 0;
       const probability = d.win_probability != null ? Number(d.win_probability) : DEFAULT_WIN_PROBABILITY;
-      return sum + value * (probability / 100);
+      return sum + dealValue * (probability / 100);
     }, 0);
 
   const dealsByStage: Record<string, { count: number; value: number }> = {};
@@ -55,7 +55,7 @@ export function computeCrmStats(leads: LeadLike[], deals: DealLike[]): CrmStats 
     const key = d.stage || "unknown";
     if (!dealsByStage[key]) dealsByStage[key] = { count: 0, value: 0 };
     dealsByStage[key].count += 1;
-    dealsByStage[key].value += Number(d.value) || 0;
+    dealsByStage[key].value += Number(d.deal_value) || 0;
   }
 
   return {

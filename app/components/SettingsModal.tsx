@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Settings, X, Loader2, Save, Check } from "lucide-react";
+import { Settings, X, Loader2, Save, Check, Link2 } from "lucide-react";
 import { getAISettings, setAISettings, type AITone, type AILanguage } from "@/app/actions/settings";
 
 const TONE_OPTIONS: { value: AITone; label: string }[] = [
@@ -23,6 +23,7 @@ export default function SettingsModal() {
   const [tone, setTone] = useState<AITone>("professionnel");
   const [language, setLanguage] = useState<AILanguage>("fr");
   const [valueProposition, setValueProposition] = useState("");
+  const [bookingUrl, setBookingUrl] = useState("");
   const [isLoading, startLoadTransition] = useTransition();
   const [isSaving, startSaveTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -36,6 +37,7 @@ export default function SettingsModal() {
         setTone(settings.tone);
         setLanguage(settings.language);
         setValueProposition(settings.valueProposition);
+        setBookingUrl(settings.bookingUrl);
         setLoaded(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "فشل تحميل الإعدادات");
@@ -53,7 +55,7 @@ export default function SettingsModal() {
     setSaved(false);
     startSaveTransition(async () => {
       try {
-        await setAISettings({ tone, language, valueProposition });
+        await setAISettings({ tone, language, valueProposition, bookingUrl });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } catch (e) {
@@ -148,6 +150,22 @@ export default function SettingsModal() {
                     placeholder="مثال: نقدم حلولاً لوجستية ذكية تساعد الشركات على تقليل تكاليف الشحن..."
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm resize-none focus:outline-blue-500"
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 mb-1.5 block flex items-center gap-1.5">
+                    <Link2 size={12} /> رابط حجز الموعد (Cal.com / Calendly)
+                  </label>
+                  <input
+                    type="url"
+                    value={bookingUrl}
+                    onChange={(e) => setBookingUrl(e.target.value)}
+                    placeholder="https://cal.com/your-name/intro"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm focus:outline-blue-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    يُضاف تلقائياً كزر حجز في نهاية كل بريد مُرسَل (يدوياً أو عبر الطيار الآلي).
+                  </p>
                 </div>
 
                 <button

@@ -11,7 +11,7 @@ export async function getSalesInsight() {
 
   const [{ data: leads, error: leadsError }, { data: deals, error: dealsError }] = await Promise.all([
     supabase.from("leads").select("ai_intent, status").eq("org_id", orgId),
-    supabase.from("deals").select("value, stage").eq("org_id", orgId),
+    supabase.from("deals").select("deal_value, stage, win_probability").eq("org_id", orgId),
   ]);
 
   if (leadsError) throw new Error(leadsError.message);

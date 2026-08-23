@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
 import { notifyAutoPilotSent } from "@/lib/whatsapp";
+import { getBookingUrl, bookingCtaText, bookingCtaHtml } from "@/lib/booking";
 import { revalidatePath } from "next/cache";
 
 const resend = new Resend(process.env.RESEND_API_KEY || "");
@@ -36,12 +37,17 @@ export async function sendLeadEmail(
 
   if (leadError || !lead) throw new Error("العميل غير موجود");
 
+  // حقن رابط الحجز تلقائياً كـ CTA — زر منسّق في نسخة HTML، وسطر رابط في النص العادي.
+  const bookingUrl = await getBookingUrl(orgId);
+  const text = body + bookingCtaText(bookingUrl);
+  const html = body.replace(/\n/g, "<br/>") + bookingCtaHtml(bookingUrl);
+
   const { error: sendError } = await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
     to: lead.email,
     subject,
-    text: body,
-    html: body.replace(/\n/g, "<br/>"),
+    text,
+    html,
   });
 
   if (sendError) throw new Error(sendError.message);

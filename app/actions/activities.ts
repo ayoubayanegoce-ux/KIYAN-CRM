@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { logActivity, type ActivityType } from "@/lib/activity";
+import { SEQUENCE_TASK_PREFIX } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 
 export type Activity = {
@@ -16,7 +17,7 @@ export type Activity = {
   created_at: string;
 };
 
-export type TaskStatus = "pending" | "done";
+export type TaskStatus = "pending" | "done" | "cancelled";
 
 export type Task = {
   id: string;
@@ -116,6 +117,15 @@ export async function completeTask(taskId: string) {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
 
+  const { data: task, error: fetchError } = await supabase
+    .from("tasks")
+    .select("lead_id, title")
+    .eq("id", taskId)
+    .eq("org_id", orgId)
+    .single();
+
+  if (fetchError || !task) throw new Error("المهمة غير موجودة");
+
   const { error } = await supabase
     .from("tasks")
     .update({ status: "done" })
@@ -123,5 +133,29 @@ export async function completeTask(taskId: string) {
     .eq("org_id", orgId);
 
   if (error) throw new Error(error.message);
+
+  // إن كانت هذه إحدى مهام تسلسل المتابعة المُجدوَلة تلقائياً، حدّث تقدّم
+  // التسلسل على العميل (يُستخدَم لعرض شارات Step X Sent في قائمة العملاء).
+  if (task.lead_id && task.title.startsWith(SEQUENCE_TASK_PREFIX)) {
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("sequence_step")
+      .eq("id", task.lead_id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (lead) {
+      const nextStep = (lead.sequence_step ?? 0) + 1;
+      await supabase
+        .from("leads")
+        .update({
+          sequence_step: nextStep,
+          sequence_status: nextStep >= 3 ? "completed" : "active",
+        })
+        .eq("id", task.lead_id)
+        .eq("org_id", orgId);
+    }
+  }
+
   revalidatePath("/");
 }

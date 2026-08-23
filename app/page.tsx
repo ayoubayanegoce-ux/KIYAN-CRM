@@ -109,7 +109,7 @@ export default async function Home() {
           <div className="w-32">
             <label className="text-xs text-slate-400">القيمة (€)</label>
             <input
-              name="value"
+              name="deal_value"
               type="number"
               min="0"
               step="1"

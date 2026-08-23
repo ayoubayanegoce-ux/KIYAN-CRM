@@ -8,6 +8,8 @@ import {
   ArrowRightLeft,
   StickyNote,
   CalendarClock,
+  CalendarCheck,
+  PauseCircle,
 } from "lucide-react";
 import type { Activity } from "@/app/actions/activities";
 
@@ -20,6 +22,8 @@ const TYPE_META: Record<string, { icon: ComponentType<{ size?: number }>; color:
   note_added: { icon: StickyNote, color: "text-purple-400" },
   task_scheduled: { icon: CalendarClock, color: "text-pink-400" },
   lead_converted: { icon: Handshake, color: "text-emerald-400" },
+  meeting_scheduled: { icon: CalendarCheck, color: "text-teal-400" },
+  sequence_paused: { icon: PauseCircle, color: "text-orange-400" },
 };
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" });
