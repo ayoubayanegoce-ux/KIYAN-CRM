@@ -31,7 +31,7 @@ export default function PrivacyPage() {
             <h2 className="text-slate-200 font-semibold mb-1.5">3. مشاركة البيانات مع أطراف ثالثة</h2>
             <p>
               نستخدم مزوّدين موثوقين لتشغيل الخدمة فقط: Clerk (المصادقة)، Supabase (قاعدة البيانات)، Google
-              Gemini (الذكاء الاصطناعي)، Resend (البريد الإلكتروني)، Telegram (الإشعارات الفورية)، وStripe
+              Gemini (الذكاء الاصطناعي)، Resend (البريد الإلكتروني)، Telegram (الإشعارات الفورية)، وYouCanPay
               (الفوترة). لا
               نبيع بياناتك لأي طرف ثالث.
             </p>

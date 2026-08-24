@@ -121,7 +121,7 @@ export default function DealsKanban({ deals, orgId, appUrl }: { deals: DealRow[]
                         <PaymentAction
                           dealId={deal.id}
                           paymentStatus={deal.payment_status}
-                          checkoutUrl={deal.stripe_checkout_url}
+                          checkoutUrl={deal.youcanpay_order_id ? `/pay/${deal.youcanpay_order_id}` : null}
                         />
                         <ProposalAction dealId={deal.id} hasProposal={!!deal.proposal} appUrl={appUrl} />
                       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { SignInButton, SignUpButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import {
@@ -56,7 +57,7 @@ const FAQS = [
   },
   {
     q: "هل يمكنني إلغاء الاشتراك في أي وقت؟",
-    a: "نعم، عبر بوابة إدارة الفواتير المتاحة من الإعدادات — بدون التزام طويل الأمد.",
+    a: "نعم — بدون التزام طويل الأمد. الاشتراك شهري ويُجدَّد يدوياً؛ يكفي ألا تُجدِّد الدفعة القادمة لتعود تلقائياً إلى الخطة المجانية.",
   },
   {
     q: "ما الفرق بين الخطط؟",
@@ -70,6 +71,7 @@ const FAQS = [
 
 function PlanCard({ plan, highlighted }: { plan: Exclude<PlanKey, "free">; highlighted?: boolean }) {
   const { isSignedIn, orgId } = useAuth();
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const info = PLAN_DISPLAY[plan];
@@ -78,14 +80,14 @@ function PlanCard({ plan, highlighted }: { plan: Exclude<PlanKey, "free">; highl
     setError(null);
     startTransition(async () => {
       try {
-        const res = await fetch("/api/stripe/checkout", {
+        const res = await fetch("/api/youcanpay/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ plan }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "فشل بدء الاشتراك");
-        window.location.href = data.url;
+        router.push(`/pay/${data.orderId}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : "فشل بدء الاشتراك");
       }
@@ -112,7 +114,7 @@ function PlanCard({ plan, highlighted }: { plan: Exclude<PlanKey, "free">; highl
       <div>
         <h3 className="text-lg font-semibold text-slate-100">{info.name}</h3>
         <p className="text-3xl font-bold text-slate-100 mt-1">
-          ${info.priceUsd}
+          {info.priceMad} <span className="text-lg font-normal">MAD</span>
           <span className="text-sm font-normal text-slate-500">/شهر</span>
         </p>
       </div>

@@ -8,47 +8,31 @@ export const PLAN_QUOTAS: Record<PlanKey, number> = {
   enterprise: 0,
 };
 
-export const PLAN_DISPLAY: Record<PlanKey, { name: string; priceUsd: number }> = {
-  free: { name: "Free", priceUsd: 0 },
-  starter: { name: "Starter", priceUsd: 49 },
-  pro: { name: "Pro", priceUsd: 149 },
-  enterprise: { name: "Enterprise", priceUsd: 299 },
-};
+/**
+ * أسعار الخطط بالدرهم المغربي (MAD) — عملة YouCanPay الأساسية. تُقرأ
+ * كمراجع process.env.NEXT_PUBLIC_* حرفية (وليس بحث ديناميكي بمفتاح) عمداً،
+ * لأن Next.js يُضمِّنها ثابتة في حزمة العميل فقط عند كتابتها هكذا — هذا
+ * الملف يُستورَد من مكوّنات "use client" (BillingPricingCards، LandingPage).
+ */
+function envPrice(value: string | undefined, fallback: number): number {
+  const parsed = value ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
-const PLAN_PRICE_ENV_KEYS: Record<Exclude<PlanKey, "free">, { public: string; server: string }> = {
-  starter: { public: "NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID", server: "STRIPE_STARTER_PRICE_ID" },
-  pro: { public: "NEXT_PUBLIC_STRIPE_PRO_PRICE_ID", server: "STRIPE_PRO_PRICE_ID" },
-  enterprise: { public: "NEXT_PUBLIC_STRIPE_ENTERPRISE_PRICE_ID", server: "STRIPE_ENTERPRISE_PRICE_ID" },
+export const PLAN_DISPLAY: Record<PlanKey, { name: string; priceMad: number }> = {
+  free: { name: "Free", priceMad: 0 },
+  starter: { name: "Starter", priceMad: envPrice(process.env.NEXT_PUBLIC_PLAN_STARTER_PRICE_MAD, 290) },
+  pro: { name: "Pro", priceMad: envPrice(process.env.NEXT_PUBLIC_PLAN_PRO_PRICE_MAD, 790) },
+  enterprise: { name: "Enterprise", priceMad: envPrice(process.env.NEXT_PUBLIC_PLAN_ENTERPRISE_PRICE_MAD, 1990) },
 };
 
 /**
- * معرّفات الأسعار الفعلية من حساب Stripe التجريبي لهذا المشروع (وُلِّدت عبر
- * scripts/setup-stripe.mjs). ليست أسراراً — معرّفات الأسعار عامة وآمنة
- * للتضمين في الكود، على عكس مفاتيح API السرية. تُستخدَم فقط عند غياب
- * متغيرات البيئة المقابلة (مثل بيئة نشر لم تُحدَّث إعداداتها بعد)، حتى لا
- * ينكسر تدفق الاشتراك بالكامل بسبب إعداد بيئة ناقص.
+ * المبلغ بالوحدة الصغرى (سنتيم) المُرسَل إلى YouCanPay tokenize. لا يوجد
+ * مفهوم "Price object" في YouCanPay كما في Stripe — الخطة والمبلغ يُحسَبان
+ * مباشرة عند كل عملية دفع.
  */
-const HARDCODED_PRICE_FALLBACKS: Record<Exclude<PlanKey, "free">, string> = {
-  starter: "price_1U7bwX0wSQUgDFQQUzFUKrJN",
-  pro: "price_1U7bwr0wSQUgDFQQyfVroOls",
-  enterprise: "price_1U7c9o0wSQUgDFQQgNhl9vga",
-};
-
-/** يُرجع دائماً معرّف سعر صالحاً (env public → env server → fallback ثابت) — لا يُرجع null أبداً. */
-export function priceIdForPlan(plan: Exclude<PlanKey, "free">): string {
-  const keys = PLAN_PRICE_ENV_KEYS[plan];
-  return process.env[keys.public] || process.env[keys.server] || HARDCODED_PRICE_FALLBACKS[plan];
-}
-
-const ALL_PAID_PLANS: Exclude<PlanKey, "free">[] = ["starter", "pro", "enterprise"];
-
-/** يقارن مقابل نفس المصدر المُستخدَم في priceIdForPlan (بما فيه fallback الثابت) لضمان تطابق الويب هوك دائماً مع الجلسات المُنشأة عبر أي مصدر سعر. */
-export function planFromPriceId(priceId: string | null | undefined): PlanKey {
-  if (!priceId) return "free";
-  for (const plan of ALL_PAID_PLANS) {
-    if (priceId === priceIdForPlan(plan)) return plan;
-  }
-  return "free";
+export function amountForPlan(plan: Exclude<PlanKey, "free">): number {
+  return Math.round(PLAN_DISPLAY[plan].priceMad * 100);
 }
 
 export function isPlanKey(value: string): value is Exclude<PlanKey, "free"> {

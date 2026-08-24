@@ -15,7 +15,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ dealI
 
   const { data: deal } = await supabase
     .from("deals")
-    .select("id, org_id, title, deal_value, stripe_checkout_url, proposal, leads(name, company)")
+    .select("id, org_id, title, deal_value, youcanpay_order_id, proposal, leads(name, company)")
     .eq("id", dealId)
     .maybeSingle();
 
@@ -101,9 +101,9 @@ export default async function ProposalPage({ params }: { params: Promise<{ dealI
         )}
 
         <div className="print:hidden space-y-4 border-t border-slate-200 pt-6">
-          {deal.stripe_checkout_url && (
+          {deal.youcanpay_order_id && (
             <a
-              href={deal.stripe_checkout_url}
+              href={`/pay/${deal.youcanpay_order_id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="block text-center py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"

@@ -72,7 +72,6 @@ export default function SettingsModal() {
   const [brandError, setBrandError] = useState<string | null>(null);
 
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
-  const [isOpeningPortal, startPortalTransition] = useTransition();
 
   function load() {
     setError(null);
@@ -127,19 +126,6 @@ export default function SettingsModal() {
         setTimeout(() => setBrandSaved(false), 2000);
       } catch (e) {
         setBrandError(e instanceof Error ? e.message : "فشل حفظ العلامة التجارية");
-      }
-    });
-  }
-
-  function handleManageBilling() {
-    startPortalTransition(async () => {
-      try {
-        const res = await fetch("/api/stripe/portal", { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "فشل فتح بوابة الفوترة");
-        window.open(data.url, "_blank", "noopener,noreferrer");
-      } catch (e) {
-        setBrandError(e instanceof Error ? e.message : "فشل فتح بوابة الفوترة");
       }
     });
   }
@@ -443,7 +429,7 @@ export default function SettingsModal() {
                         <span className="text-slate-400">الخطة الحالية</span>
                         <span className="text-slate-200 font-medium">
                           {PLAN_DISPLAY[subscription.plan].name}
-                          {subscription.plan !== "free" && ` — $${PLAN_DISPLAY[subscription.plan].priceUsd}/mo`}
+                          {subscription.plan !== "free" && ` — ${PLAN_DISPLAY[subscription.plan].priceMad} MAD/mo`}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs">
@@ -453,20 +439,13 @@ export default function SettingsModal() {
                           {subscription.aiMonthlyQuota > 0 ? ` / ${subscription.aiMonthlyQuota}` : " (بلا حد أقصى)"}
                         </span>
                       </div>
-                      {subscription.hasStripeCustomer && (
-                        <button
-                          onClick={handleManageBilling}
-                          disabled={isOpeningPortal}
-                          className="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
-                        >
-                          {isOpeningPortal ? (
-                            <Loader2 size={13} className="animate-spin" />
-                          ) : (
-                            <ExternalLink size={13} />
-                          )}
-                          إدارة الفواتير وبطاقة الدفع
-                        </button>
-                      )}
+                      <a
+                        href="/billing"
+                        className="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer"
+                      >
+                        <ExternalLink size={13} />
+                        إدارة الفوترة والاشتراك
+                      </a>
                     </>
                   )}
                 </div>

@@ -272,8 +272,7 @@ export type SubscriptionInfo = {
   subscriptionStatus: string;
   aiUsageCount: number;
   aiMonthlyQuota: number;
-  hasStripeCustomer: boolean;
-  stripeSubscriptionId: string | null;
+  planExpiresAt: string | null;
 };
 
 const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
@@ -281,8 +280,7 @@ const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
   subscriptionStatus: "inactive",
   aiUsageCount: 0,
   aiMonthlyQuota: PLAN_QUOTAS.free,
-  hasStripeCustomer: false,
-  stripeSubscriptionId: null,
+  planExpiresAt: null,
 };
 
 export async function getSubscriptionInfo(): Promise<SubscriptionInfo> {
@@ -291,7 +289,7 @@ export async function getSubscriptionInfo(): Promise<SubscriptionInfo> {
 
   const { data, error } = await supabase
     .from("org_settings")
-    .select("plan, subscription_status, ai_usage_count, ai_monthly_quota, stripe_customer_id, stripe_subscription_id")
+    .select("plan, subscription_status, ai_usage_count, ai_monthly_quota, plan_expires_at")
     .eq("org_id", orgId)
     .maybeSingle();
 
@@ -302,7 +300,6 @@ export async function getSubscriptionInfo(): Promise<SubscriptionInfo> {
     subscriptionStatus: data.subscription_status ?? "inactive",
     aiUsageCount: data.ai_usage_count ?? 0,
     aiMonthlyQuota: data.ai_monthly_quota ?? PLAN_QUOTAS.free,
-    hasStripeCustomer: Boolean(data.stripe_customer_id),
-    stripeSubscriptionId: data.stripe_subscription_id ?? null,
+    planExpiresAt: data.plan_expires_at ?? null,
   };
 }

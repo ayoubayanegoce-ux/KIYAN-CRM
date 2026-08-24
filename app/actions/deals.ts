@@ -3,7 +3,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity";
-import { getStripeClient } from "@/lib/stripe";
+import { isYouCanPayConfigured, tokenizePayment } from "@/lib/youcanpay";
+import { createPendingOrder, attachTokenToOrder } from "@/lib/paymentOrders";
 import { getAppUrl } from "@/lib/appUrl";
 import { generateProposalItems, type ProposalItem } from "@/lib/ai";
 import { assertAiQuota, incrementAiUsage } from "@/lib/quota";
@@ -40,8 +41,7 @@ export type DealRow = {
   win_probability: number | null;
   stage: DealStage;
   payment_status: PaymentStatus;
-  stripe_checkout_url: string | null;
-  stripe_checkout_session_id: string | null;
+  youcanpay_order_id: string | null;
   proposal: DealProposal | null;
   created_at: string;
   leads?: {
@@ -212,17 +212,20 @@ export async function convertLeadToDeal(leadId: string) {
 }
 
 /**
- * ينشئ رابط دفع Stripe Checkout (Session-hosted، بدون Stripe.js على العميل)
- * لصفقة موجودة، ويحفظ معرّف الجلسة والرابط على الصفقة بحالة "pending" —
- * التأكيد الفعلي للدفع (تحويل الحالة إلى "paid") يتم حصراً عبر الويب هوك
- * (app/api/webhooks/stripe)، وليس من هذا الإجراء ولا من صفحة النجاح.
+ * ينشئ طلب دفع YouCanPay (يُنشئ payment_orders بحالة "pending" ثم يُولِّد
+ * token عبر tokenize) لصفقة موجودة، ويحفظ order_id على الصفقة بحالة
+ * "pending". الرابط المُعاد هو صفحة داخلية (/pay/[orderId]) تُحمِّل yp.js —
+ * YouCanPay لا يوفّر صفحة دفع مُستضافة جاهزة كما في Stripe Checkout. التأكيد
+ * الفعلي للدفع (تحويل الحالة إلى "paid") يتم حصراً عبر الويب هوك
+ * (app/api/webhooks/youcanpay)، وليس من هذا الإجراء ولا من صفحة الدفع.
  */
 export async function createDealCheckoutSession(dealId: string): Promise<{ url: string }> {
   const { orgId } = await auth();
   if (!orgId) throw new Error("يجب اختيار منظمة أولاً");
 
-  const stripe = getStripeClient();
-  if (!stripe) throw new Error("Stripe غير مُهيَّأ: أضف STRIPE_SECRET_KEY في .env.local");
+  if (!isYouCanPayConfigured()) {
+    throw new Error("YouCanPay غير مُهيَّأ: أضف YOUCANPAY_PRIVATE_KEY و NEXT_PUBLIC_YOUCANPAY_PUBLIC_KEY في .env.local");
+  }
 
   const { data: deal, error } = await supabase
     .from("deals")
@@ -238,34 +241,25 @@ export async function createDealCheckoutSession(dealId: string): Promise<{ url: 
 
   const appUrl = await getAppUrl();
   const lead = Array.isArray(deal.leads) ? deal.leads[0] : deal.leads;
+  const amount = Math.round(Number(deal.deal_value) * 100);
+  const currency = "eur";
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "eur",
-          unit_amount: Math.round(Number(deal.deal_value) * 100),
-          product_data: { name: deal.title },
-        },
-        quantity: 1,
-      },
-    ],
-    customer_email: lead?.email || undefined,
-    success_url: `${appUrl}/?payment=success`,
-    cancel_url: `${appUrl}/?payment=cancelled`,
+  const orderId = await createPendingOrder({ orgId, kind: "deal", dealId, amount, currency });
+
+  const { transactionId, token } = await tokenizePayment({
+    orderId,
+    amount,
+    currency,
+    successUrl: `${appUrl}/?payment=success`,
+    errorUrl: `${appUrl}/?payment=cancelled`,
     metadata: { deal_id: dealId, org_id: orgId },
+    customer: { name: lead?.name || undefined, email: lead?.email || undefined },
   });
-
-  if (!session.url) throw new Error("تعذّر إنشاء رابط الدفع");
+  await attachTokenToOrder(orderId, token, transactionId);
 
   const { error: updateError } = await supabase
     .from("deals")
-    .update({
-      stripe_checkout_session_id: session.id,
-      stripe_checkout_url: session.url,
-      payment_status: "pending",
-    })
+    .update({ youcanpay_order_id: orderId, payment_status: "pending" })
     .eq("id", dealId)
     .eq("org_id", orgId);
 
@@ -275,12 +269,12 @@ export async function createDealCheckoutSession(dealId: string): Promise<{ url: 
     orgId,
     dealId,
     type: "payment_link_created",
-    description: `💳 تم إنشاء رابط دفع Stripe للصفقة "${deal.title}"`,
-    metadata: { stripe_session_id: session.id, amount: deal.deal_value },
+    description: `💳 تم إنشاء رابط دفع YouCanPay للصفقة "${deal.title}"`,
+    metadata: { order_id: orderId, amount: deal.deal_value },
   });
 
   revalidatePath("/");
-  return { url: session.url };
+  return { url: `${appUrl}/pay/${orderId}` };
 }
 
 /**

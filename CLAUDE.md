@@ -6,7 +6,7 @@
 - **Auth & Multi-tenancy**: Clerk v7 (`@clerk/nextjs` with Organizations & `auth()`)
 - **Database**: Supabase PostgreSQL (`@supabase/supabase-js`) with RLS
 - **AI Agent**: Google GenAI (`@google/genai`, model: `gemini-3.6-flash`)
-- **Payments**: Stripe Checkout Sessions (`stripe`), hosted redirect flow; payment confirmation is webhook-driven (`app/api/webhooks/stripe`), never trusted from the success-page redirect alone
+- **Payments**: YouCanPay (`lib/youcanpay.ts`), tokenize + embedded `yp.js` form (no hosted redirect); payment confirmation is webhook-driven (`app/api/webhooks/youcanpay`) against an internal `payment_orders` idempotency ledger, never trusted from the payment page alone
 
 ## Database Schema (Supabase)
 - **leads**: `id` (uuid), `org_id` (text), `name` (text), `email` (text), `company` (text), `status` (text), `ai_score` (int), `ai_intent` (text: 'hot'|'warm'|'cold'), `created_at` (timestamptz)

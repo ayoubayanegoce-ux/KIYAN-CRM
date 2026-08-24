@@ -6,36 +6,16 @@ import { getLeads } from "@/app/actions/leads";
 import { getDeals } from "@/app/actions/deals";
 import { getOrgMembers } from "@/lib/team";
 import { computeTeamDistribution } from "@/lib/analytics";
-import { getStripeClient } from "@/lib/stripe";
 import { PLAN_DISPLAY, type PlanKey } from "@/lib/plans";
 import BillingPricingCards from "./BillingPricingCards";
-import ManageBillingButton from "./ManageBillingButton";
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" });
 
 const STATUS_LABELS_AR: Record<string, string> = {
   active: "نشط",
-  trialing: "فترة تجريبية",
   inactive: "غير مفعَّل (Free)",
-  cancelled: "مُلغى",
-  past_due: "متأخر الدفع",
-  unpaid: "غير مدفوع",
+  expired: "منتهي الصلاحية — يُرجى التجديد",
 };
-
-async function getRenewalDate(subscriptionId: string | null): Promise<Date | null> {
-  if (!subscriptionId) return null;
-  const stripe = getStripeClient();
-  if (!stripe) return null;
-
-  try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const periodEnd = subscription.items.data[0]?.current_period_end;
-    return periodEnd ? new Date(periodEnd * 1000) : null;
-  } catch (error) {
-    console.error("Error fetching subscription renewal date:", error);
-    return null;
-  }
-}
 
 export default async function BillingPage() {
   const { orgId } = await auth();
@@ -55,7 +35,7 @@ export default async function BillingPage() {
     getOrgMembers(orgId),
   ]);
 
-  const renewalDate = await getRenewalDate(subscription.stripeSubscriptionId);
+  const renewalDate = subscription.planExpiresAt ? new Date(subscription.planExpiresAt) : null;
   const teamDistribution = computeTeamDistribution(leads, deals, members);
   const usagePct = subscription.aiMonthlyQuota > 0 ? Math.min(100, (subscription.aiUsageCount / subscription.aiMonthlyQuota) * 100) : 0;
   const barColor = usagePct > 90 ? "bg-red-500" : usagePct > 70 ? "bg-amber-500" : "bg-emerald-500";
@@ -84,11 +64,12 @@ export default async function BillingPage() {
                 الحالة: {STATUS_LABELS_AR[subscription.subscriptionStatus] ?? subscription.subscriptionStatus}
               </span>
             </div>
-            {subscription.hasStripeCustomer && <ManageBillingButton />}
           </div>
 
           {renewalDate && (
-            <p className="text-xs text-slate-500">تاريخ التجديد القادم: {dateFormatter.format(renewalDate)}</p>
+            <p className="text-xs text-slate-500">
+              {renewalDate < new Date() ? "انتهت صلاحية الخطة بتاريخ" : "تاريخ التجديد القادم"}: {dateFormatter.format(renewalDate)}
+            </p>
           )}
 
           <div className="space-y-1.5 pt-2 border-t border-slate-800">
